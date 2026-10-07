@@ -571,6 +571,16 @@ function route(){
   const app = document.getElementById("app");
   if(hash.indexOf("#learner=") === 0){
     const payload = b64urlDecode(hash.slice(9));
+    // Bug fix: this is the "Copy link" flow - the one meant for the
+    // learner's OWN device, opened fresh with nothing else set yet. It
+    // rendered the questions fine from the local `payload`, but never
+    // wrote `payload` into STATE.learnerItem, which is what
+    // captureChoiceAnswer/captureShortAnswer read to know where to send
+    // an answer (see _answerKey() below). Every tap or keystroke was
+    // silently a no-op: nothing to catch, nothing in the console,
+    // because _flushAnswers() just returned early with no session item
+    // to write against. Setting it here is the fix.
+    STATE.learnerItem = payload ? {area: payload.area, grade: payload.grade, sc: payload.sc} : null;
     STATE.learnerSessionCode = (payload && payload.sc) ? payload.sc : null;
     renderLearner(app, payload);
     return;
@@ -634,6 +644,21 @@ function noSessionNoticeHtml(){
   if(STATE.learnerSessionCode) return "";
   return '<div class="err" style="margin:8px 0;">This code or link isn\'t tied to an assessment session, so what you answer here won\'t reach your examiner. Please ask them for the correct code or link.</div>';
 }
+// Which question (by index into MATH_ITEMS[area][grade]) is currently on
+// screen, per "area_grade" - a plain in-memory position, not saved
+// anywhere, so a fresh page load always starts back at question 1 (the
+// learner's actual answers already captured on the server are untouched
+// either way). Kept separate from _answerBuffer, which is what's typed/
+// tapped so far, because they serve different purposes: one is "where am
+// I", the other is "what have I said".
+const _qIndexByKey = {};
+function goLearnerQuestion(newIdx){
+  const key = _answerKey();
+  if(!key || !STATE.learnerItem) return;
+  const items = (MATH_ITEMS[STATE.learnerItem.area] && MATH_ITEMS[STATE.learnerItem.area][STATE.learnerItem.grade]) || [];
+  _qIndexByKey[key] = Math.max(0, Math.min(newIdx, items.length));
+  renderLearner(document.getElementById("app"), {area: STATE.learnerItem.area, grade: STATE.learnerItem.grade, sc: STATE.learnerItem.sc});
+}
 function learnerContentHtml(payload){
   const area = payload.area, grade = payload.grade;
   const meta = AREA_META[area];
@@ -644,34 +669,74 @@ function learnerContentHtml(payload){
   if(!items){
     return `<div class="reading-sheet"><h2>${escapeHtml(meta.label)}</h2><p>Grade ${escapeHtml(grade)} isn't ready here yet. Please ask your examiner for a different code.</p></div>`;
   }
-  const rows = items.map((it,i) => {
-    if(it.type === "choice"){
-      // A pattern item can carry an explicit "sequence" array (e.g.
-      // ["circle","square","circle","square","?"]) so the pattern itself
-      // is SEEN as shapes, not read as a sentence - CAPS expects this to
-      // be concrete/pictorial, especially at Grade R. Items without a
-      // sequence (most Shape/Measurement/Data items) just show their
-      // ordinary prompt text, with icons only on the answer buttons.
-      const sequenceHtml = it.sequence ? `
-        <div class="row pattern-sequence" style="gap:10px;flex-wrap:wrap;margin:4px 0;">
-          ${it.sequence.map(tok => tok === "?"
-            ? `<span class="visual-token"><span class="visual-icon pattern-blank" style="width:40px;height:40px;">?</span></span>`
-            : visualTokenHtml(tok, 40)
-          ).join("")}
-        </div>` : "";
-      const promptLabel = it.sequence ? "What comes next?" : it.prompt;
-      return `<div class="col" style="gap:6px;width:100%;max-width:460px;">
-        <label style="font-size:1.05rem;">${i+1}. ${escapeHtml(promptLabel)}</label>
-        ${sequenceHtml}
-        <div class="row" id="choicerow-${i}" style="gap:8px;flex-wrap:wrap;">
-          ${it.options.map((opt,oi) => `<button type="button" class="btn secondary small icon-choice-btn" data-idx="${oi}" onclick="captureChoiceAnswer(${i},${oi},this)">${visualTokenHtml(opt, 36)}</button>`).join("")}
-        </div>
-      </div>`;
-    }
-    return `<div class="row" style="width:100%;max-width:460px;"><label style="flex:1;font-size:1.05rem;">${i+1}. ${escapeHtml(it.prompt)}</label><input type="text" autocomplete="off" autocapitalize="off" spellcheck="false" style="width:120px;" oninput="captureShortAnswer(${i},this.value)" /></div>`;
-  }).join("");
-  return `<div class="reading-sheet"><h2>${escapeHtml(meta.label)}</h2>${noSessionNoticeHtml()}<p style="font-size:1.05rem;">Grade ${escapeHtml(grade)}. Answer each question below.</p>
-    <div class="col" style="gap:14px;width:100%;align-items:flex-start;">${rows}</div></div>`;
+  // Number Sense is read aloud by the examiner (mode "oral", no learner
+  // device involved), so it never reaches this function with items to
+  // paginate - everything that does is a "digital" area and gets the
+  // one-question-at-a-time treatment below, matching how MathIT presents
+  // a single focused question instead of a long scrolling worksheet.
+  const key = area + "_" + grade;
+  if(_qIndexByKey[key] == null) _qIndexByKey[key] = 0;
+  const total = items.length;
+  const idx = _qIndexByKey[key];
+  const buffer = _answerBuffer[key] || [];
+  const progressHtml = `<div class="muted" style="font-size:.95rem;margin-bottom:2px;">Question ${Math.min(idx+1,total)} of ${total}</div>`;
+
+  if(idx >= total){
+    return `<div class="reading-sheet" style="max-width:480px;">
+      <h2>${escapeHtml(meta.label)}</h2>
+      ${noSessionNoticeHtml()}
+      <p style="font-size:1.2rem;margin-top:10px;">Well done! You've answered all ${total} questions.</p>
+      <button type="button" class="btn secondary small" onclick="goLearnerQuestion(${total-1})">&larr; Go back and check my answers</button>
+    </div>`;
+  }
+
+  const it = items[idx];
+  let questionHtml;
+  if(it.type === "choice"){
+    // A pattern item can carry an explicit "sequence" array (e.g.
+    // ["circle","square","circle","square","?"]) so the pattern itself
+    // is SEEN as shapes, not read as a sentence - CAPS expects this to
+    // be concrete/pictorial, especially at Grade R. Items without a
+    // sequence (most Shape/Measurement/Data items) just show their
+    // ordinary prompt text, with icons only on the answer buttons.
+    const sequenceHtml = it.sequence ? `
+      <div class="row pattern-sequence" style="gap:14px;flex-wrap:wrap;justify-content:center;margin:10px 0;">
+        ${it.sequence.map(tok => tok === "?"
+          ? `<span class="visual-token"><span class="visual-icon pattern-blank" style="width:56px;height:56px;">?</span></span>`
+          : visualTokenHtml(tok, 56)
+        ).join("")}
+      </div>` : "";
+    const promptLabel = it.sequence ? "What comes next?" : it.prompt;
+    const selectedOi = buffer[idx];
+    questionHtml = `<div class="col" style="gap:10px;width:100%;align-items:center;">
+      <label style="font-size:1.3rem;text-align:center;">${escapeHtml(promptLabel)}</label>
+      ${sequenceHtml}
+      <div class="row" id="choicerow-${idx}" style="gap:10px;flex-wrap:wrap;justify-content:center;">
+        ${it.options.map((opt,oi) => `<button type="button" class="btn secondary icon-choice-btn${selectedOi===oi?' clay':''}" data-idx="${oi}" onclick="captureChoiceAnswer(${idx},${oi},this); const nb=document.getElementById('learnerNextBtn'); if(nb) nb.disabled=false;">${visualTokenHtml(opt, 48)}</button>`).join("")}
+      </div>
+    </div>`;
+  } else {
+    const typed = buffer[idx] != null ? buffer[idx] : "";
+    questionHtml = `<div class="col" style="gap:14px;width:100%;align-items:center;">
+      <label style="font-size:1.3rem;text-align:center;">${escapeHtml(it.prompt)}</label>
+      <input type="text" autocomplete="off" autocapitalize="off" spellcheck="false" style="width:160px;font-size:1.2rem;text-align:center;" value="${escapeHtml(typed)}" oninput="captureShortAnswer(${idx},this.value); const nb=document.getElementById('learnerNextBtn'); if(nb) nb.disabled=!this.value.trim();" />
+    </div>`;
+  }
+
+  const hasAnswer = buffer[idx] !== undefined && buffer[idx] !== null && buffer[idx] !== "";
+  const isLast = idx === total - 1;
+  const navRow = `<div class="row" style="width:100%;max-width:420px;justify-content:space-between;margin-top:18px;">
+    <button type="button" class="btn secondary small" ${idx===0?'disabled':''} onclick="goLearnerQuestion(${idx-1})">&larr; Back</button>
+    <button type="button" class="btn small" id="learnerNextBtn" ${hasAnswer?'':'disabled'} onclick="goLearnerQuestion(${idx+1})">${isLast ? "Finish" : "Next →"}</button>
+  </div>`;
+
+  return `<div class="reading-sheet" style="max-width:480px;">
+    <h2>${escapeHtml(meta.label)}</h2>
+    ${noSessionNoticeHtml()}
+    ${progressHtml}
+    ${questionHtml}
+    ${navRow}
+  </div>`;
 }
 
 /* ============================================================
