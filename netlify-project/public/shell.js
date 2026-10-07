@@ -55,7 +55,6 @@ function renderShellLogin(app){
           <input type="password" id="shellPwInput" placeholder="Password" autocomplete="off" />
           <button class="btn" onclick="tryShellLogin()">Continue</button>
         </div>
-        <p class="muted" style="font-size:.85rem;margin-top:10px;">This is a light gate to keep casual visitors out, not real security.</p>
       </div>
     </div>
   `;
