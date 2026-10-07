@@ -78,6 +78,136 @@ function gradeLabel(g){
 function escapeHtml(s){
   return String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
+
+/* ============================================================
+   Visual aids for the learner-facing (child's own device) screen only.
+   CAPS expects concrete/pictorial work well before a child reads words
+   independently, especially at Grade R - so a pattern like "circle,
+   square, circle, square" has to be SEEN as shapes, not read as text.
+   This never changes the underlying prompt/options/answer data (the
+   examiner's reference booklet, response sheets and reports still show
+   plain text, which is correct for an adult reading on paper) - it only
+   adds a picture layer on top, purely in how the learner's own screen
+   renders a recognised word or short phrase. Geometric shapes and size/
+   colour swatches use fixed hex colours rather than the app's theme
+   variables on purpose: several of those variables swap to light tones
+   in dark mode (see the reading-sheet fix above) and a shape icon must
+   stay the same real colour on every device.
+   ============================================================ */
+function _svgIcon(inner, vb){
+  return `<svg viewBox="0 0 ${vb||48} ${vb||48}" width="100%" height="100%" aria-hidden="true" focusable="false">${inner}</svg>`;
+}
+const ICON_MAP = {
+  // Pure geometric shapes - the core of the Grade R/1 "no words in a
+  // pattern" fix.
+  "circle": _svgIcon(`<circle cx="24" cy="24" r="18" fill="#189E71"/>`),
+  "square": _svgIcon(`<rect x="6" y="6" width="36" height="36" rx="4" fill="#C97B4A"/>`),
+  "triangle": _svgIcon(`<polygon points="24,6 44,42 4,42" fill="#2E6FBA"/>`),
+  "rectangle": _svgIcon(`<rect x="3" y="12" width="42" height="24" rx="4" fill="#8C6FB0"/>`),
+  "star": _svgIcon(`<polygon points="24,3 29.6,17.6 45,18.8 33.2,28.6 37,43.6 24,35.2 11,43.6 14.8,28.6 3,18.8 18.4,17.6" fill="#D9A62E"/>`),
+  "moon": _svgIcon(`<path d="M30,4 A20,20 0 1 0 30,44 A15,20 0 0 1 30,4 Z" fill="#5B6B8C"/>`),
+  "sun": _svgIcon(`<g fill="#E8A33D"><circle cx="24" cy="24" r="11"/><g stroke="#E8A33D" stroke-width="3" stroke-linecap="round"><line x1="24" y1="2" x2="24" y2="9"/><line x1="24" y1="39" x2="24" y2="46"/><line x1="2" y1="24" x2="9" y2="24"/><line x1="39" y1="24" x2="46" y2="24"/><line x1="8" y1="8" x2="13" y2="13"/><line x1="35" y1="35" x2="40" y2="40"/><line x1="40" y1="8" x2="35" y2="13"/><line x1="13" y1="35" x2="8" y2="40"/></g></g>`),
+  "heart": _svgIcon(`<path d="M24,42 C8,30 4,20 10,12 C14,6 22,7 24,16 C26,7 34,6 38,12 C44,20 40,30 24,42 Z" fill="#D1687A"/>`),
+  // Size, shown as an actual size difference rather than the words
+  // "big"/"small" - both render the same shape, just scaled.
+  "big": _svgIcon(`<circle cx="24" cy="24" r="22" fill="#189E71"/>`),
+  "small": _svgIcon(`<circle cx="24" cy="24" r="10" fill="#189E71"/>`),
+  // Colour, shown as the actual colour rather than its name.
+  "red": _svgIcon(`<circle cx="24" cy="24" r="18" fill="#D1453B"/>`),
+  "blue": _svgIcon(`<circle cx="24" cy="24" r="18" fill="#2E6FBA"/>`),
+  "green": _svgIcon(`<circle cx="24" cy="24" r="18" fill="#2F9E52"/>`),
+  // 3-D objects (Space and Shape, Grade R): a ball/sphere vs a box/cube.
+  "ball shape": _svgIcon(`<circle cx="24" cy="24" r="18" fill="#C97B4A"/><ellipse cx="18" cy="17" rx="7" ry="4" fill="#fff" opacity="0.35"/>`),
+  "box shape": _svgIcon(`<polygon points="10,16 30,10 42,16 22,22" fill="#8C6FB0"/><polygon points="10,16 22,22 22,40 10,34" fill="#6F4F94"/><polygon points="22,22 42,16 42,34 22,40" fill="#7A5AA3"/>`),
+  // 3-D object names used from Grade 1 up (Space and Shape). Sphere and
+  // cube reuse the ball/box look above since that is what they are;
+  // prism gets its own box so two "box-shaped" answer options in the
+  // same item still look like two different buttons.
+  "sphere": _svgIcon(`<circle cx="24" cy="24" r="18" fill="#C97B4A"/><ellipse cx="18" cy="17" rx="7" ry="4" fill="#fff" opacity="0.35"/>`),
+  "cube": _svgIcon(`<polygon points="10,16 30,10 42,16 22,22" fill="#8C6FB0"/><polygon points="10,16 22,22 22,40 10,34" fill="#6F4F94"/><polygon points="22,22 42,16 42,34 22,40" fill="#7A5AA3"/>`),
+  "prism": _svgIcon(`<polygon points="6,20 26,12 42,18 22,26" fill="#4A7C9E"/><polygon points="6,20 22,26 22,42 6,36" fill="#345A74"/><polygon points="22,26 42,18 42,34 22,42" fill="#3D6D8C"/>`),
+  "cone": _svgIcon(`<ellipse cx="24" cy="40" rx="16" ry="5" fill="#8C5A2E"/><polygon points="24,5 9,38 39,38" fill="#C97B4A"/>`),
+  "cylinder": _svgIcon(`<rect x="8" y="10" width="32" height="26" fill="#189E71"/><ellipse cx="24" cy="36" rx="16" ry="5" fill="#0E7A58"/><ellipse cx="24" cy="10" rx="16" ry="5" fill="#3FB386"/>`),
+  "pyramid": _svgIcon(`<polygon points="24,4 6,38 42,38" fill="#D9A62E"/><polygon points="24,4 42,38 48,33" fill="#AD8415"/>`),
+  // Short actions/movement pattern (clap, stomp, clap, stomp...) and
+  // concrete nouns from the Measurement and Data items - plain emoji
+  // here rather than custom art, since these are already clear,
+  // universally-recognised pictures in their own right.
+  "clap": "👏", "stomp": "👣", "jump": "🦘",
+  "pencil": "✏️", "car": "🚗", "feather": "🪶", "stone": "🪨",
+  "teaspoon": "🥄", "bucket": "🪣", "worm": "🐛", "snake": "🐍",
+  "apple": "🍎", "banana": "🍌", "ball": "⚽", "box": "📦",
+  "sweets": "🍬", "sweet": "🍬",
+  // Time-of-day, reusing the sun/moon shapes already built above.
+  "wake up": _svgIcon(`<g fill="#E8A33D"><circle cx="24" cy="24" r="11"/><g stroke="#E8A33D" stroke-width="3" stroke-linecap="round"><line x1="24" y1="2" x2="24" y2="9"/><line x1="24" y1="39" x2="24" y2="46"/><line x1="2" y1="24" x2="9" y2="24"/><line x1="39" y1="24" x2="46" y2="24"/><line x1="8" y1="8" x2="13" y2="13"/><line x1="35" y1="35" x2="40" y2="40"/><line x1="40" y1="8" x2="35" y2="13"/><line x1="13" y1="35" x2="8" y2="40"/></g></g>`),
+  "go to sleep": _svgIcon(`<path d="M30,4 A20,20 0 1 0 30,44 A15,20 0 0 1 30,4 Z" fill="#5B6B8C"/>`),
+  // Grade 1-4 Measurement/Data concrete nouns, same approach as above -
+  // plain emoji where one exists and already reads clearly.
+  "rope": "🪢", "brick": "🧱", "cup": "🥛",
+  "breakfast": "🍳", "supper": "🍽️",
+  "pear": "🍐", "orange": "🍊"
+};
+// Looks up a word/short phrase for a learner-facing icon: lowercases,
+// strips a leading "a "/"an "/"the " and trailing punctuation, then
+// tries the whole phrase before falling back to its last word (so "a
+// pencil" and "pencil" both find the pencil icon). Returns null (not a
+// blank string) when nothing matches, so callers can fall back to text.
+function iconForToken(raw){
+  if(raw == null) return null;
+  let t = String(raw).trim().toLowerCase().replace(/^(a|an|the)\s+/,'').replace(/[.?!]+$/,'');
+  if(ICON_MAP[t]) return ICON_MAP[t];
+  const words = t.split(/\s+/);
+  const last = words[words.length-1];
+  if(ICON_MAP[last]) return ICON_MAP[last];
+  // Simple plural fallback ("apples" -> "apple", "oranges" -> "orange")
+  // so content can use whichever form reads naturally without needing
+  // a duplicate ICON_MAP entry for every plural.
+  if(t.length > 1 && t.endsWith('s') && ICON_MAP[t.slice(0,-1)]) return ICON_MAP[t.slice(0,-1)];
+  if(last.length > 1 && last.endsWith('s') && ICON_MAP[last.slice(0,-1)]) return ICON_MAP[last.slice(0,-1)];
+  return null;
+}
+// For an option like "6 cars" or "9 cars" (Data Handling comparisons),
+// shows the actual counted quantity as repeated icons rather than a
+// single picture plus the numeral in words - letting a child SEE 6 is
+// fewer than 9, not just read it. Only fires for a clean "<number>
+// <noun>" option where we have an icon for the (singularised) noun and
+// the count is small enough to lay out cleanly; everything else falls
+// through to the normal single-icon rendering below.
+function quantityIconHtml(raw, size){
+  const m = String(raw).trim().match(/^(\d{1,2})\s+([a-zA-Z]+)$/);
+  if(!m) return null;
+  const count = parseInt(m[1], 10);
+  if(count < 1 || count > 12) return null;
+  const noun = m[2].toLowerCase();
+  const singular = noun.endsWith('s') ? noun.slice(0,-1) : noun;
+  const icon = ICON_MAP[noun] || ICON_MAP[singular];
+  if(!icon) return null;
+  const isEmoji = !icon.startsWith("<svg");
+  const unit = Math.max(14, Math.round((size||40) * 0.5));
+  const dot = isEmoji
+    ? `<span class="visual-icon emoji" style="font-size:${unit}px;line-height:1;">${icon}</span>`
+    : `<span class="visual-icon" style="width:${unit}px;height:${unit}px;">${icon}</span>`;
+  const row = Array.from({length: count}, () => dot).join("");
+  const label = `<span class="visual-caption">${escapeHtml(raw)}</span>`;
+  return `<span class="visual-token"><span class="visual-qty-row" style="display:flex;flex-wrap:wrap;gap:1px;max-width:${(size||40)*3}px;justify-content:center;">${row}</span>${label}</span>`;
+}
+// Renders one visual token (icon if we have one, otherwise the plain
+// escaped text) plus a small caption underneath so the word is never
+// lost - some children will still be sounding out letters even where a
+// picture is the main cue, and it keeps the screen usable for an item a
+// future content update doesn't have an icon for yet.
+function visualTokenHtml(raw, size){
+  const qty = quantityIconHtml(raw, size);
+  if(qty) return qty;
+  const icon = iconForToken(raw);
+  const label = `<span class="visual-caption">${escapeHtml(raw)}</span>`;
+  if(!icon) return `<span class="visual-token text-only">${escapeHtml(raw)}</span>`;
+  const isEmoji = !icon.startsWith("<svg");
+  const box = isEmoji
+    ? `<span class="visual-icon emoji" style="font-size:${size||40}px;line-height:1;">${icon}</span>`
+    : `<span class="visual-icon" style="width:${size||40}px;height:${size||40}px;">${icon}</span>`;
+  return `<span class="visual-token">${box}${label}</span>`;
+}
 function b64urlEncode(obj){
   const json = JSON.stringify(obj);
   const b64 = btoa(unescape(encodeURIComponent(json)));
@@ -516,10 +646,25 @@ function learnerContentHtml(payload){
   }
   const rows = items.map((it,i) => {
     if(it.type === "choice"){
+      // A pattern item can carry an explicit "sequence" array (e.g.
+      // ["circle","square","circle","square","?"]) so the pattern itself
+      // is SEEN as shapes, not read as a sentence - CAPS expects this to
+      // be concrete/pictorial, especially at Grade R. Items without a
+      // sequence (most Shape/Measurement/Data items) just show their
+      // ordinary prompt text, with icons only on the answer buttons.
+      const sequenceHtml = it.sequence ? `
+        <div class="row pattern-sequence" style="gap:10px;flex-wrap:wrap;margin:4px 0;">
+          ${it.sequence.map(tok => tok === "?"
+            ? `<span class="visual-token"><span class="visual-icon pattern-blank" style="width:40px;height:40px;">?</span></span>`
+            : visualTokenHtml(tok, 40)
+          ).join("")}
+        </div>` : "";
+      const promptLabel = it.sequence ? "What comes next?" : it.prompt;
       return `<div class="col" style="gap:6px;width:100%;max-width:460px;">
-        <label style="font-size:1.05rem;">${i+1}. ${escapeHtml(it.prompt)}</label>
+        <label style="font-size:1.05rem;">${i+1}. ${escapeHtml(promptLabel)}</label>
+        ${sequenceHtml}
         <div class="row" id="choicerow-${i}" style="gap:8px;flex-wrap:wrap;">
-          ${it.options.map((opt,oi) => `<button type="button" class="btn secondary small" data-idx="${oi}" onclick="captureChoiceAnswer(${i},${oi},this)">${escapeHtml(opt)}</button>`).join("")}
+          ${it.options.map((opt,oi) => `<button type="button" class="btn secondary small icon-choice-btn" data-idx="${oi}" onclick="captureChoiceAnswer(${i},${oi},this)">${visualTokenHtml(opt, 36)}</button>`).join("")}
         </div>
       </div>`;
     }

@@ -342,6 +342,7 @@ const MATH_ITEMS = {
       {
         "type": "choice",
         "prompt": "What comes next? circle, square, circle, square, __",
+        "sequence": ["circle", "square", "circle", "square", "?"],
         "options": [
           "circle",
           "square",
@@ -352,6 +353,7 @@ const MATH_ITEMS = {
       {
         "type": "choice",
         "prompt": "What comes next? star, star, moon, star, star, moon, __",
+        "sequence": ["star", "star", "moon", "star", "star", "moon", "?"],
         "options": [
           "star",
           "moon",
@@ -362,6 +364,7 @@ const MATH_ITEMS = {
       {
         "type": "choice",
         "prompt": "What comes next? big, small, big, small, __",
+        "sequence": ["big", "small", "big", "small", "?"],
         "options": [
           "big",
           "small"
@@ -371,6 +374,7 @@ const MATH_ITEMS = {
       {
         "type": "choice",
         "prompt": "What comes next? red, red, blue, red, red, blue, __",
+        "sequence": ["red", "red", "blue", "red", "red", "blue", "?"],
         "options": [
           "red",
           "blue",
@@ -381,6 +385,7 @@ const MATH_ITEMS = {
       {
         "type": "choice",
         "prompt": "What comes next? 1, 2, 1, 2, __",
+        "sequence": ["1", "2", "1", "2", "?"],
         "options": [
           "1",
           "2",
@@ -391,6 +396,7 @@ const MATH_ITEMS = {
       {
         "type": "choice",
         "prompt": "What comes next in this pattern: clap, stomp, clap, stomp, __?",
+        "sequence": ["clap", "stomp", "clap", "stomp", "?"],
         "options": [
           "clap",
           "stomp",
@@ -403,6 +409,7 @@ const MATH_ITEMS = {
       {
         "type": "choice",
         "prompt": "What comes next? red, blue, red, blue, red, __",
+        "sequence": ["red", "blue", "red", "blue", "red", "?"],
         "options": [
           "blue",
           "red",
@@ -413,6 +420,7 @@ const MATH_ITEMS = {
       {
         "type": "choice",
         "prompt": "What comes next? circle, square, circle, square, __",
+        "sequence": ["circle", "square", "circle", "square", "?"],
         "options": [
           "circle",
           "square",
@@ -433,6 +441,7 @@ const MATH_ITEMS = {
       {
         "type": "choice",
         "prompt": "What comes next? big, small, big, small, __",
+        "sequence": ["big", "small", "big", "small", "?"],
         "options": [
           "big",
           "small"
@@ -442,6 +451,7 @@ const MATH_ITEMS = {
       {
         "type": "choice",
         "prompt": "star, star, moon, star, star, moon, __",
+        "sequence": ["star", "star", "moon", "star", "star", "moon", "?"],
         "options": [
           "star",
           "moon",
@@ -464,6 +474,7 @@ const MATH_ITEMS = {
       {
         "type": "choice",
         "prompt": "What comes next? square, triangle, square, triangle, __",
+        "sequence": ["square", "triangle", "square", "triangle", "?"],
         "options": [
           "square",
           "triangle",
@@ -526,6 +537,7 @@ const MATH_ITEMS = {
       {
         "type": "choice",
         "prompt": "triangle, triangle, square, triangle, triangle, square, __",
+        "sequence": ["triangle", "triangle", "square", "triangle", "triangle", "square", "?"],
         "options": [
           "triangle",
           "square",
@@ -563,6 +575,7 @@ const MATH_ITEMS = {
       {
         "type": "choice",
         "prompt": "triangle, triangle, triangle, square, triangle, triangle, triangle, square, __",
+        "sequence": ["triangle", "triangle", "triangle", "square", "triangle", "triangle", "triangle", "square", "?"],
         "options": [
           "triangle",
           "square",
@@ -605,6 +618,7 @@ const MATH_ITEMS = {
       {
         "type": "choice",
         "prompt": "circle, square, square, circle, square, square, __",
+        "sequence": ["circle", "square", "square", "circle", "square", "square", "?"],
         "options": [
           "circle",
           "square",
@@ -647,6 +661,7 @@ const MATH_ITEMS = {
       {
         "type": "choice",
         "prompt": "square, triangle, triangle, square, triangle, triangle, square, __",
+        "sequence": ["square", "triangle", "triangle", "square", "triangle", "triangle", "square", "?"],
         "options": [
           "square",
           "triangle",
