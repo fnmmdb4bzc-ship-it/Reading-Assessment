@@ -169,6 +169,34 @@ th{background:var(--paper);}
 .reading-sheet .passage-text{font-size:1.7rem;line-height:1.5;}
 .reading-sheet .letters-grid span, .reading-sheet .words-grid span{font-size:2.3rem;}
 .reading-sheet .words-grid{grid-template-columns:repeat(4,1fr);}
+/* The reading-sheet keeps a fixed light paper background on purpose, even
+   when the device is in dark mode (see --reading-bg/--reading-ink above,
+   which are deliberately never redefined in the dark-mode blocks). But
+   plain <label> text and .btn.secondary text/borders use --ink-soft and
+   --sage-dark, which DO flip to light colours in dark mode for use on a
+   dark background - making them nearly invisible against this sheet's
+   always-light paper. Pin them to the sheet's own fixed ink colour so
+   question text and answer buttons stay legible regardless of the
+   device's colour scheme. */
+.reading-sheet label{color:var(--reading-ink);}
+.reading-sheet .btn.secondary{color:var(--reading-ink);border-color:var(--reading-ink);}
+.reading-sheet input[type=text]{color:var(--reading-ink);background:#fff;border-color:var(--reading-ink);}
+/* Visual aids on the learner's own screen (patterns shown as shapes, not
+   words; a picture alongside Measurement/Data/Shape answer choices).
+   See ICON_MAP / visualTokenHtml in app.js. */
+.visual-token{display:flex;flex-direction:column;align-items:center;gap:3px;}
+.visual-icon{display:inline-block;}
+.visual-icon.emoji{display:inline-flex;align-items:center;justify-content:center;}
+.visual-icon.pattern-blank{
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.5rem;font-weight:bold;color:var(--reading-ink);
+  border:3px dashed var(--reading-ink);border-radius:10px;background:rgba(0,0,0,0.04);
+}
+.visual-caption{font-size:.7rem;color:var(--reading-ink);opacity:.75;}
+.visual-token.text-only{font-size:1.05rem;color:var(--reading-ink);}
+.pattern-sequence{align-items:center;padding:6px 0;}
+.icon-choice-btn{flex-direction:column;gap:2px;padding:10px 14px;min-width:74px;min-height:74px;}
+.icon-choice-btn .visual-caption{color:inherit;}
 .badge-row{display:flex;gap:8px;flex-wrap:wrap;}
 .muted{color:var(--ink-soft);}
 .err{background:var(--danger-bg);color:var(--danger);padding:12px 16px;border-radius:10px;border:2px solid var(--danger);}
@@ -214,8 +242,13 @@ th{background:var(--paper);}
   .tag{background:#fff;color:#000;border-color:#999;}
 }
 @media (max-width: 820px){
-  .sidebar{width:80px;}
-  .sidebar .label-text{display:none;}
+  /* Previously this hid the nav label text entirely (width:80px plus
+     display:none on .label-text), leaving a column of blank, unlabeled
+     buttons with no icons to replace the text - impossible to tell
+     Patterns from Shape from Measurement. Narrow the sidebar a bit for
+     small screens, but keep the text visible and legible. */
+  .sidebar{width:150px;}
+  .sidebar button.navitem{font-size:.9rem;padding:8px 8px;}
   .letters-grid{grid-template-columns:repeat(5,1fr);}
   .words-grid{grid-template-columns:repeat(4,1fr);}
 }
