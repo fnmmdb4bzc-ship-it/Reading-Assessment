@@ -8,12 +8,29 @@ const CORS = {
   "access-control-allow-headers": "content-type"
 };
 
+const VALID_SUBJECTS = ["english", "afrikaans", "math"];
+
+// Same reasoning as sessions.mjs: English keeps the original standalone
+// tool's store name ("captures", no suffix) so in-progress digital
+// capture (spelling/dictation/writing typed on the learner's device)
+// already live at dsetletsread.netlify.app keeps working with no
+// migration. Afrikaans and Math get their own new, scoped names.
+const CAPTURE_STORE_NAME = {
+  english: "captures",
+  afrikaans: "captures-afrikaans",
+  math: "captures-math",
+  default: "captures-default"
+};
+
 export default async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS });
   }
-  const store = getStore("captures");
   const url = new URL(req.url);
+  const subjectParam = url.searchParams.get("subject");
+  // Same per-subject separation as sessions.mjs - see the comment there.
+  const subject = VALID_SUBJECTS.includes(subjectParam) ? subjectParam : "default";
+  const store = getStore(CAPTURE_STORE_NAME[subject]);
   const session = url.searchParams.get("session");
   const kind = url.searchParams.get("kind");
   const grade = url.searchParams.get("grade");

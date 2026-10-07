@@ -8,12 +8,36 @@ const CORS = {
   "access-control-allow-headers": "content-type"
 };
 
+const VALID_SUBJECTS = ["english", "afrikaans", "math"];
+
+// English keeps the exact store name the original standalone reading
+// tool used ("sessions", no suffix), so this unified app reads and
+// writes the SAME Netlify Blobs store that's already live at
+// dsetletsread.netlify.app - every learner session already recorded
+// there keeps showing up here with no migration step. Afrikaans and
+// Math have never been deployed under this app before, so they get
+// their own new, subject-scoped store names.
+const SESSIONS_STORE_NAME = {
+  english: "sessions",
+  afrikaans: "sessions-afrikaans",
+  math: "sessions-math",
+  default: "sessions-default"
+};
+
 export default async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS });
   }
-  const store = getStore("sessions");
   const url = new URL(req.url);
+  const subjectParam = url.searchParams.get("subject");
+  // Each of the three placement tools (English, Afrikaans, Mathematics)
+  // gets its own completely separate Blobs store, so one tab's sessions
+  // never show up in another tab's session list. Falling back to
+  // "default" (instead of erroring) if the subject is ever missing keeps
+  // this function from 500-ing on a stray request rather than silently
+  // losing data in the wrong place.
+  const subject = VALID_SUBJECTS.includes(subjectParam) ? subjectParam : "default";
+  const store = getStore(SESSIONS_STORE_NAME[subject]);
   const code = url.searchParams.get("code");
 
   try {

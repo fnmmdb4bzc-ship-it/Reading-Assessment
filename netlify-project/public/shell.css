@@ -1,0 +1,49 @@
+/* Lets Test! shell - tab bar, disclaimer banner, login screen, and the
+   full-height iframe that swaps between the three subject tools. Base
+   colour tokens, fonts, .btn/.card/.row/.muted etc. all come from
+   styles.css, which this shell shares with every subject tool so the
+   look matches exactly. */
+
+.shell{min-height:100vh;display:flex;flex-direction:column;}
+
+.shell-topbar{
+  display:flex;align-items:center;gap:16px;padding:14px 22px;
+  background:var(--paper-raised);border-bottom:2px solid var(--line);
+  box-shadow:var(--shadow);
+}
+.shell-topbar img.logo{height:48px;width:auto;display:block;border-radius:8px;}
+.shell-topbar .shell-title-block{display:flex;flex-direction:column;gap:2px;}
+.shell-topbar .shell-title-block .brand{font-size:1.4rem;}
+.shell-topbar .spacer{flex:1;}
+
+.shell-disclaimer{
+  padding:8px 22px;background:var(--paper);border-bottom:1px solid var(--line);
+  font-size:.85rem;color:var(--ink-soft);
+}
+
+.shell-tabs{
+  display:flex;gap:4px;padding:0 22px;background:var(--paper-raised);
+  border-bottom:2px solid var(--line);
+}
+.shell-tabs button{
+  appearance:none;border:none;background:transparent;cursor:pointer;
+  padding:12px 18px;font-size:1rem;font-family:inherit;color:var(--ink-soft);
+  border-bottom:3px solid transparent;margin-bottom:-2px;
+}
+.shell-tabs button:hover{color:var(--ink);}
+.shell-tabs button.active{color:var(--sage-dark);border-bottom-color:var(--sage);font-weight:bold;}
+
+/* display:flex here (rather than relying on the iframe's height:100%) is
+   deliberate: a percentage height on an iframe only resolves reliably
+   against an ancestor with an explicit height, and a flex item's
+   flex-grow'd size doesn't always count as "explicit" for that purpose
+   across browsers. Making the iframe itself a flex child with flex:1
+   sidesteps that entirely. */
+.shell-frame-wrap{flex:1;min-height:0;display:flex;}
+.shell-frame-wrap iframe{display:block;flex:1;width:100%;border:none;background:var(--paper);}
+
+.shell-login-wrap{
+  flex:1;display:flex;align-items:center;justify-content:center;padding:24px;
+}
+.shell-login-card{max-width:440px;width:100%;}
+.shell-login-card img.logo{height:64px;width:auto;display:block;margin:0 auto 10px;border-radius:10px;}

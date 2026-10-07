@@ -2,12 +2,39 @@
   publish = "public"
   functions = "netlify/functions"
 
+# Each subject tab talks to the same two shared functions, but with a
+# fixed "subject" query param added so sessions/captures for English,
+# Afrikaans and Mathematics are stored completely separately (see
+# netlify/functions/lib/*Store.mjs - storage is keyed by subject).
+# Netlify merges each request's own query string (code=..., session=...,
+# kind=..., grade=...) with the subject param added here.
+
 [[redirects]]
-  from = "/api/sessions"
-  to = "/.netlify/functions/sessions"
+  from = "/api/english/sessions"
+  to = "/.netlify/functions/sessions?subject=english"
   status = 200
 
 [[redirects]]
-  from = "/api/capture"
-  to = "/.netlify/functions/capture"
+  from = "/api/english/capture"
+  to = "/.netlify/functions/capture?subject=english"
+  status = 200
+
+[[redirects]]
+  from = "/api/afrikaans/sessions"
+  to = "/.netlify/functions/sessions?subject=afrikaans"
+  status = 200
+
+[[redirects]]
+  from = "/api/afrikaans/capture"
+  to = "/.netlify/functions/capture?subject=afrikaans"
+  status = 200
+
+[[redirects]]
+  from = "/api/math/sessions"
+  to = "/.netlify/functions/sessions?subject=math"
+  status = 200
+
+[[redirects]]
+  from = "/api/math/capture"
+  to = "/.netlify/functions/capture?subject=math"
   status = 200
