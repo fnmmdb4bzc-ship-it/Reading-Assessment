@@ -5,7 +5,12 @@ const CORS = {
   "content-type": "application/json",
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
-  "access-control-allow-headers": "content-type"
+  "access-control-allow-headers": "content-type",
+  // Without this, a browser (or a carrier/proxy cache in between) can serve
+  // a stale cached copy of the GET response during polling, so the examiner
+  // console shows nothing new until a full page reload forces a fresh
+  // request. This forces every response to always be fetched fresh.
+  "cache-control": "no-store, no-cache, must-revalidate"
 };
 
 const VALID_SUBJECTS = ["english", "afrikaans", "math"];
