@@ -391,15 +391,23 @@ const CODE_MAP = {};
    session's one (area, grade) item set, scoped by session code exactly
    like the reading tool so two learners never collide. Netlify Functions
    + Blobs on the backend (netlify/functions/capture.mjs); the examiner's
-   console polls every 2.5s rather than getting pushed updates, so there
-   is a short, normal delay before typing shows up here.
+   console polls every 400ms rather than getting pushed updates (a true
+   instant push would need a websocket-style service this simple
+   Functions+Blobs backend doesn't have), so there is still a small,
+   near-instant delay before an answer shows up here - averaging about
+   200ms, not the 1.25s-average it was before, which matters for a live
+   assessment where the examiner is deciding in real time whether to
+   move up or down a level.
    ============================================================ */
 const API_BASE = "/api/math";
 const Capture = {
   async read(session, area, grade){
     if(!session) return null;
     try{
-      const res = await fetch(`${API_BASE}/capture?session=${encodeURIComponent(session)}&kind=${area}&grade=${grade}`);
+      // cache: "no-store" stops the browser from quietly reusing an old
+      // response during polling - without it, the examiner screen can
+      // appear frozen until a full page reload forces a fresh request.
+      const res = await fetch(`${API_BASE}/capture?session=${encodeURIComponent(session)}&kind=${area}&grade=${grade}`, {cache: "no-store"});
       if(!res.ok) return null;
       return await res.json();
     }catch(e){ return null; }
@@ -479,21 +487,32 @@ function stopCapturePolling(){
 function startCapturePolling(area, grade){
   stopCapturePolling();
   if(AREA_META[area].mode !== "digital") return;
+  let inFlight = false; // guards against a slow read overlapping the next tick now that polling is fast
   const tick = async () => {
-    const s = STATE.session;
-    if(!s) return;
-    const cap = await Capture.read(s.code, area, grade);
-    const cacheKey = area+"_"+grade;
-    const prevJson = JSON.stringify(STATE.captureCache[cacheKey] || null);
-    STATE.captureCache[cacheKey] = cap;
-    const recChanged = JSON.stringify(cap) !== prevJson;
-    const scoreChanged = applyDigitalCaptureRecord(area, grade, cap);
-    if((recChanged || scoreChanged) && !isExaminerTyping()){
-      renderConsoleContent();
+    if(inFlight) return;
+    inFlight = true;
+    try{
+      const s = STATE.session;
+      if(!s) return;
+      const cap = await Capture.read(s.code, area, grade);
+      const cacheKey = area+"_"+grade;
+      const prevJson = JSON.stringify(STATE.captureCache[cacheKey] || null);
+      STATE.captureCache[cacheKey] = cap;
+      const recChanged = JSON.stringify(cap) !== prevJson;
+      const scoreChanged = applyDigitalCaptureRecord(area, grade, cap);
+      if((recChanged || scoreChanged) && !isExaminerTyping()){
+        renderConsoleContent();
+      }
+    } finally {
+      inFlight = false;
     }
   };
   tick();
-  STATE.capturePollTimer = setInterval(tick, 2500);
+  // Polls every 400ms instead of every 2.5s - a real assessment is a live
+  // back-and-forth with the child, and the examiner needs to see an
+  // answer land in well under a second to decide whether to move up or
+  // down a level, not wait out a multi-second lag on every question.
+  STATE.capturePollTimer = setInterval(tick, 400);
 }
 
 /* ============================================================
@@ -740,38 +759,51 @@ function learnerContentHtml(payload){
 }
 
 /* ============================================================
-   Learner-side writers: debounced, whole-record flushes (never a
-   read-modify-write against the server) exactly like the reading tool's
-   spelling capture, keyed by the item index so two rapid answers can't
-   race each other into a lost update.
+   Learner-side writers: whole-record flushes (never a read-modify-write
+   against the server), keyed by the item index so two rapid answers
+   can't race each other into a lost update.
+   A tap on a choice button is one discrete, final action - there is
+   nothing to wait for, so it writes immediately. Typing a short answer
+   fires this on every keystroke, so THAT still debounces briefly
+   (120ms, just long enough to not fire a network call per letter)
+   rather than sending a half-typed number on every key press. This
+   matters for a live assessment: the examiner is deciding in real time
+   whether to go up or down a level, so the learner's answer needs to
+   reach them as fast as possible, not sit queued for a quarter second.
    ============================================================ */
 const _captureTimers = {};
 function _debounceCaptureWrite(timerKey, fn){
   clearTimeout(_captureTimers[timerKey]);
-  _captureTimers[timerKey] = setTimeout(fn, 250);
+  _captureTimers[timerKey] = setTimeout(fn, 120);
 }
 const _answerBuffer = {}; // "area_grade" -> array of typed/selected answers so far
 function _answerKey(){ return STATE.learnerItem ? (STATE.learnerItem.area+"_"+STATE.learnerItem.grade) : null; }
-function _flushAnswers(){
+function _writeAnswersNow(key){
+  Capture.write(STATE.learnerSessionCode, STATE.learnerItem.area, STATE.learnerItem.grade, {answers: (_answerBuffer[key]||[]).slice()});
+}
+function _flushAnswers(immediate){
   if(!STATE.learnerSessionCode || !STATE.learnerItem) return;
   const key = _answerKey();
-  _debounceCaptureWrite(key, () => {
-    Capture.write(STATE.learnerSessionCode, STATE.learnerItem.area, STATE.learnerItem.grade, {answers: (_answerBuffer[key]||[]).slice()});
-  });
+  if(immediate){
+    clearTimeout(_captureTimers[key]); // a pending debounced write from earlier typing would otherwise still fire and is now redundant
+    _writeAnswersNow(key);
+    return;
+  }
+  _debounceCaptureWrite(key, () => _writeAnswersNow(key));
 }
 function captureShortAnswer(idx, val){
   const key = _answerKey();
   if(!key) return;
   if(!_answerBuffer[key]) _answerBuffer[key] = [];
   _answerBuffer[key][idx] = val;
-  _flushAnswers();
+  _flushAnswers(false);
 }
 function captureChoiceAnswer(idx, optionIdx, btnEl){
   const key = _answerKey();
   if(!key) return;
   if(!_answerBuffer[key]) _answerBuffer[key] = [];
   _answerBuffer[key][idx] = optionIdx;
-  _flushAnswers();
+  _flushAnswers(true);
   const row = document.getElementById("choicerow-"+idx);
   if(row){
     Array.from(row.children).forEach(b => b.classList.remove("clay"));
