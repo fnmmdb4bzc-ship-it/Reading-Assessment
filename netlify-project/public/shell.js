@@ -1,4 +1,4 @@
-// Lets Test! shell
+// Let's Test! shell
 //
 // This page is the single entry point for all three diagnostic tools.
 // It signs the examiner in once, then shows a persistent tab bar
@@ -27,7 +27,7 @@ const SUBJECTS = [
 
 // Draft wording - see the note left for Debby about this disclaimer; it
 // still needs her sign-off before this is final.
-const DISCLAIMER_TEXT = "Lets Test! is a set of diagnostic screening tools based on the CAPS curriculum's requirements and expectations for each grade. They are not formal, standardised psychometric tests, and are not a substitute for a formal psycho-educational, speech-language or occupational-therapy assessment.";
+const DISCLAIMER_TEXT = "Let's Test! is a set of diagnostic screening tools based on the CAPS curriculum's requirements and expectations for each grade. They are not formal, standardised psychometric tests, and are not a substitute for a formal psycho-educational, speech-language or occupational-therapy assessment.";
 
 const SHELL_STATE = {
   authed: localStorage.getItem(SHARED_AUTH_KEY) === "1",
@@ -48,7 +48,7 @@ function renderShellLogin(app){
     <div class="shell-login-wrap">
       <div class="card shell-login-card">
         <img class="logo" src="logo.png" alt="Debby Smit Educational Therapy logo" />
-        <h2 style="text-align:center;margin:0 0 4px;">Lets Test!</h2>
+        <h2 style="text-align:center;margin:0 0 4px;">Let's Test!</h2>
         <p class="muted" style="text-align:center;margin-top:0;">Sign in to continue</p>
         <p class="note" style="margin-top:14px;">${DISCLAIMER_TEXT}</p>
         <div class="row" style="margin-top:14px;justify-content:center;">
@@ -91,7 +91,7 @@ function renderShellMain(app){
     <div class="shell-topbar">
       <img class="logo" src="logo.png" alt="Debby Smit Educational Therapy logo" />
       <div class="shell-title-block">
-        <span class="brand">Lets Test!</span>
+        <span class="brand">Let's Test!</span>
         <span class="tag muted">CAPS-based diagnostic placement tools</span>
       </div>
       <div class="spacer"></div>
