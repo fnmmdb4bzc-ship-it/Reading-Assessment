@@ -635,7 +635,10 @@ const Capture = {
   async read(session, kind, grade){
     if(!session) return null;
     try{
-      const res = await fetch(`${API_BASE}/capture?session=${encodeURIComponent(session)}&kind=${kind}&grade=${grade}`);
+      // cache: "no-store" stops the browser from quietly reusing an old
+      // response during polling - without it, a screen can appear frozen
+      // until a full page reload forces a fresh request.
+      const res = await fetch(`${API_BASE}/capture?session=${encodeURIComponent(session)}&kind=${kind}&grade=${grade}`, {cache: "no-store"});
       if(!res.ok) return null;
       return await res.json();
     }catch(e){ return null; }
@@ -744,23 +747,34 @@ function stopCapturePolling(){
 }
 function startCapturePolling(kind, grade){
   stopCapturePolling();
+  let inFlight = false; // guards against a slow read overlapping the next tick now that polling is fast
   const tick = async () => {
-    const s = STATE.session;
-    if(!s) return;
-    const cap = await Capture.read(s.code, kind, grade);
-    const cacheKey = kind+"_"+grade;
-    const prevJson = JSON.stringify(STATE.captureCache[cacheKey] || null);
-    STATE.captureCache[cacheKey] = cap;
-    const recChanged = JSON.stringify(cap) !== prevJson;
-    let scoreChanged = false;
-    if(kind==="spelling") scoreChanged = applySpellingCaptureRecord(grade, cap);
-    if(kind==="dictation") scoreChanged = applyDictationCaptureRecord(grade, cap);
-    if((recChanged || scoreChanged) && !isExaminerTyping()){
-      renderConsoleContent();
+    if(inFlight) return;
+    inFlight = true;
+    try{
+      const s = STATE.session;
+      if(!s) return;
+      const cap = await Capture.read(s.code, kind, grade);
+      const cacheKey = kind+"_"+grade;
+      const prevJson = JSON.stringify(STATE.captureCache[cacheKey] || null);
+      STATE.captureCache[cacheKey] = cap;
+      const recChanged = JSON.stringify(cap) !== prevJson;
+      let scoreChanged = false;
+      if(kind==="spelling") scoreChanged = applySpellingCaptureRecord(grade, cap);
+      if(kind==="dictation") scoreChanged = applyDictationCaptureRecord(grade, cap);
+      if((recChanged || scoreChanged) && !isExaminerTyping()){
+        renderConsoleContent();
+      }
+    } finally {
+      inFlight = false;
     }
   };
   tick();
-  STATE.capturePollTimer = setInterval(tick, 2500);
+  // Polls every 400ms instead of every 2.5s - a real assessment is a live
+  // back-and-forth with the child, and the examiner needs to see typing
+  // land in well under a second to decide whether to move up or down a
+  // level, not wait out a multi-second lag.
+  STATE.capturePollTimer = setInterval(tick, 400);
 }
 
 /* ============================================================
@@ -787,7 +801,9 @@ const Store = {
   },
   async getSession(code){
     try{
-      const res = await fetch(`${API_BASE}/sessions?code=${encodeURIComponent(code)}`);
+      // cache: "no-store" matters now that a learner's own device can call
+      // this too (checking a typed code, or polling the live channel).
+      const res = await fetch(`${API_BASE}/sessions?code=${encodeURIComponent(code)}`, {cache: "no-store"});
       if(!res.ok) return null;
       return await res.json();
     }catch(e){ return null; }
@@ -839,6 +855,10 @@ const STATE = {
   standalonePage: null,// "reference" when viewing the reference booklet outside a session
   learnerItem: null,   // {kind,id} once a learner code has been entered on this device
   learnerSessionCode: null, // session this learner's typing should be captured into, if any
+  learnerDisplayName: "",  // cached from the session, for the one-code flow's greeting (see startLearnerLivePolling)
+  learnerEnded: false,     // true once this learner's code has been switched off by the examiner
+  learnerLivePollTimer: null, // only runs for the new one-code-per-session flow
+  liveChannel: null,       // examiner's own cached copy of {kind, id, active} for the open session
   saveStatus: "unknown",    // "unknown" | "saved" | "error" - see setSaveStatus()
   captureCache: {},    // "kind_grade" -> last-fetched capture record (or null)
   capturePollTimer: null
@@ -860,12 +880,33 @@ function route(){
   if(hash.indexOf("#learner=") === 0){
     const payload = b64urlDecode(hash.slice(9));
     STATE.learnerSessionCode = (payload && payload.sc) ? payload.sc : null;
+    STATE.learnerEnded = false;
+    // A link copied from Overview's "Copy learner link" carries only {sc} -
+    // no kind/id, because it's meant to be opened once at the START of the
+    // whole session, before the examiner has decided what to send first.
+    // An older-style link that already has a kind+id baked in (from
+    // before this feature) keeps working exactly as it always has, with
+    // no live polling.
+    if(payload && payload.sc && !payload.t){
+      // Unlike an old-style stimulus link, this bare session-code link is
+      // tracked in STATE.learnerItem too, same as a typed code, so the
+      // "Enter a different code" button and any later route() call behave
+      // the same way either way the learner got here.
+      STATE.learnerItem = {kind: null, id: null, sc: payload.sc};
+      startLearnerLivePolling();
+    }
     renderLearner(app, payload);
     return;
   }
   if(STATE.learnerItem){
-    const payload = linkPayloadFor(STATE.learnerItem.kind, STATE.learnerItem.id);
     STATE.learnerSessionCode = STATE.learnerItem.sc || null;
+    // Waiting mode (bare session code, nothing sent yet): kind is null,
+    // so there's no real stimulus payload to build - just the session tie.
+    const payload = STATE.learnerItem.kind
+      ? linkPayloadFor(STATE.learnerItem.kind, STATE.learnerItem.id)
+      : {};
+    if(STATE.learnerItem.sc) payload.sc = STATE.learnerItem.sc;
+    if(!payload.n) payload.n = STATE.learnerDisplayName || "";
     renderLearner(app, payload);
     return;
   }
@@ -895,10 +936,16 @@ document.addEventListener("DOMContentLoaded", route);
    ============================================================ */
 function renderLearner(app, payload){
   let inner = "";
-  if(!payload){
+  if(!payload || (!payload.t && !payload.sc)){
     inner = '<div class="err">That code or link isn\'t valid. Please ask your examiner for a fresh one.</div>';
   } else if(payload.exp && nowMs() > payload.exp){
     inner = '<div class="err">This link has expired. Please ask your examiner for a fresh one.</div>';
+  } else if(payload.sc && STATE.learnerEnded){
+    inner = learnerEndedHtml();
+  } else if(payload.sc && !payload.t){
+    // Logged in with a whole-session code (or a session-only link) and the
+    // examiner hasn't sent anything to this screen yet.
+    inner = learnerWaitingHtml();
   } else {
     inner = learnerContentHtml(payload);
   }
@@ -914,11 +961,86 @@ function renderLearner(app, payload){
       <div class="centered">
         <div class="col" style="align-items:center;width:100%;">
           ${inner}
-          ${STATE.learnerItem ? `<button class="btn secondary small no-print" style="margin-top:16px;" onclick="STATE.learnerItem=null; STATE.learnerSessionCode=null; route();">${STATE.examinerAuthed ? "Done - back to examiner console" : "Enter a different code"}</button>` : ''}
+          ${STATE.learnerItem ? `<button class="btn secondary small no-print" style="margin-top:16px;" onclick="exitLearnerMode()">${STATE.examinerAuthed ? "Done - back to examiner console" : "Enter a different code"}</button>` : ''}
         </div>
       </div>
     </div>
   `;
+}
+function exitLearnerMode(){
+  stopLearnerLivePolling();
+  STATE.learnerItem = null;
+  STATE.learnerSessionCode = null;
+  STATE.learnerEnded = false;
+  route();
+}
+// A simple spinning flower for the "nothing sent yet" waiting screen - see
+// the .waiting-flower rule in styles.css for the spin animation.
+const FLOWER_SVG = `<svg class="waiting-flower" width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <circle cx="32" cy="15" r="11" fill="#F6C6D0"/>
+  <circle cx="49" cy="32" r="11" fill="#FBE2A7"/>
+  <circle cx="32" cy="49" r="11" fill="#C7E8CA"/>
+  <circle cx="15" cy="32" r="11" fill="#BFE1F6"/>
+  <circle cx="32" cy="32" r="10" fill="#F3A6B8"/>
+</svg>`;
+function learnerWaitingHtml(){
+  return `<div class="reading-sheet" style="max-width:420px;text-align:center;">
+    ${FLOWER_SVG}
+    <p style="font-size:1.25rem;margin-top:14px;">Getting your activity ready...</p>
+    <p class="muted">Sit tight - your teacher will send the next activity to your screen in just a moment.</p>
+  </div>`;
+}
+function learnerEndedHtml(){
+  return `<div class="reading-sheet" style="max-width:420px;text-align:center;">
+    <p style="font-size:1.25rem;">All done for today!</p>
+    <p class="muted">This code has been switched off. Please check with your examiner.</p>
+    <button type="button" class="btn secondary small no-print" style="margin-top:10px;" onclick="STATE.learnerEnded=false; startLearnerLivePolling();">Check again</button>
+  </div>`;
+}
+// Only used by the new one-code-per-session flow (a bare session code, or
+// a "Copy learner link" link that carries just {sc}). Old-style stimulus
+// codes/links keep working exactly as before, with no polling.
+function stopLearnerLivePolling(){
+  if(STATE.learnerLivePollTimer){ clearInterval(STATE.learnerLivePollTimer); STATE.learnerLivePollTimer = null; }
+}
+function startLearnerLivePolling(){
+  stopLearnerLivePolling();
+  const sc = STATE.learnerSessionCode;
+  if(!sc) return;
+  let inFlight = false;
+  const tick = async () => {
+    if(inFlight) return;
+    inFlight = true;
+    try{
+      // Reuses the capture channel's own storage (kind "_live", a single
+      // slot per session) rather than the full session record, so this
+      // never risks overwriting the examiner's scores with a stale copy.
+      const live = await Capture.read(sc, "_live", "_");
+      const active = !live || live.active !== false;
+      if(!active){
+        STATE.learnerEnded = true;
+        stopLearnerLivePolling();
+        renderLearner(document.getElementById("app"), {sc});
+        return;
+      }
+      const liveKind = live ? (live.kind || null) : null;
+      const liveId = live ? (live.id || null) : null;
+      const curKind = STATE.learnerItem ? STATE.learnerItem.kind : null;
+      const curId = STATE.learnerItem ? STATE.learnerItem.id : null;
+      if(live && live.n) STATE.learnerDisplayName = live.n;
+      if(liveKind !== curKind || String(liveId) !== String(curId)){
+        STATE.learnerItem = {kind: liveKind, id: liveId, sc};
+        const payload = liveKind ? linkPayloadFor(liveKind, liveId) : {};
+        payload.sc = sc;
+        payload.n = STATE.learnerDisplayName || "";
+        renderLearner(document.getElementById("app"), payload);
+      }
+    } finally {
+      inFlight = false;
+    }
+  };
+  tick();
+  STATE.learnerLivePollTimer = setInterval(tick, 500);
 }
 function noSessionNoticeHtml(){
   if(STATE.learnerSessionCode) return "";
@@ -992,7 +1114,10 @@ function learnerContentHtml(payload){
 const _captureTimers = {};
 function _debounceCaptureWrite(timerKey, fn){
   clearTimeout(_captureTimers[timerKey]);
-  _captureTimers[timerKey] = setTimeout(fn, 250);
+  // 120ms instead of 250ms - just long enough to not fire a network call
+  // per letter, short enough that the examiner isn't waiting on it during
+  // a live assessment.
+  _captureTimers[timerKey] = setTimeout(fn, 120);
 }
 const _spellingWordsBuffer = {}; // grade -> array of typed words so far
 function captureSpellingWord(grade, idx, val){
@@ -1043,7 +1168,7 @@ function renderExaminerLogin(app){
   `;
   document.getElementById("pwInput").addEventListener("keydown", e => { if(e.key === "Enter") tryExaminerLogin(); });
 }
-function tryExaminerLogin(){
+async function tryExaminerLogin(){
   const val = document.getElementById("pwInput").value.trim();
   if(val === EXAMINER_PASSWORD){
     STATE.examinerAuthed = true;
@@ -1069,6 +1194,23 @@ function tryExaminerLogin(){
     if(baseItem && sessionPart){
       STATE.learnerItem = Object.assign({}, baseItem, {sc: sessionPart});
       STATE.learnerSessionCode = sessionPart;
+      route();
+      return;
+    }
+  }
+  // Not a password and not one of the old per-item codes - see if it's a
+  // whole-session code (one code for the entire assessment, typed once).
+  // This is the new, recommended way in: it logs the learner straight into
+  // the waiting screen with nothing chosen yet, and whatever the examiner
+  // sends to their screen from the console shows up here on its own.
+  if(upper.length >= 4){
+    const sess = await Store.getSession(upper);
+    if(sess){
+      STATE.learnerDisplayName = sess.learnerName || "";
+      STATE.learnerItem = {kind: null, id: null, sc: upper};
+      STATE.learnerSessionCode = upper;
+      STATE.learnerEnded = false;
+      startLearnerLivePolling();
       route();
       return;
     }
@@ -1167,6 +1309,7 @@ async function createSession(){
   setSaveStatus(ok);
   STATE.session = sess;
   STATE.navSection = "overview";
+  STATE.liveChannel = {kind: null, id: null, active: true};
   route();
 }
 async function openSession(code){
@@ -1176,18 +1319,67 @@ async function openSession(code){
     STATE.session = sess;
     STATE.navSection = "overview";
     setSaveStatus(true);
+    await refreshLiveChannel();
     route();
   }
 }
 function closeSession(){
   stopCapturePolling();
   STATE.session = null;
+  STATE.liveChannel = null;
   route();
 }
 async function persistSession(){
   if(!STATE.session) return;
   const ok = await Store.saveSession(STATE.session);
   setSaveStatus(ok);
+}
+
+/* ============================================================
+   Live channel: what the learner's screen is currently showing for the
+   open session - one small record per session (reusing the capture
+   endpoint's storage with the made-up kind "_live"), kept completely
+   separate from the session record itself. The learner's own device
+   reads this record every half-second while waiting for the examiner to
+   send something, and it never writes the full session back - only the
+   examiner ever writes here.
+   {kind, id, active, n} - kind/id null means "nothing sent yet", active:
+   false means the examiner has switched this learner's code off, and n
+   is the learner's name, carried along so the waiting/greeting screens
+   can use it without the learner's device fetching the whole session.
+   No record at all (brand-new session, never touched) means the same as
+   {kind:null, id:null, active:true}.
+   ============================================================ */
+async function refreshLiveChannel(){
+  const s = STATE.session;
+  if(!s){ STATE.liveChannel = null; return; }
+  const live = await Capture.read(s.code, "_live", "_");
+  STATE.liveChannel = live || {kind: null, id: null, active: true};
+}
+async function writeLiveChannel(patch){
+  const s = STATE.session;
+  if(!s) return;
+  STATE.liveChannel = Object.assign({kind: null, id: null, active: true}, STATE.liveChannel, patch, {n: s.learnerName});
+  await Capture.write(s.code, "_live", "_", STATE.liveChannel);
+}
+// Sends one item straight to the learner's screen. Pushing something new
+// also makes sure the code is switched on - there would be no point
+// sending an activity to a learner who's locked out.
+async function pushLiveItem(kind, id){
+  await writeLiveChannel({kind, id, active: true});
+  renderConsoleContent();
+}
+// Clears the learner's screen back to the waiting flower, without
+// switching the code off - for the moment between items while deciding
+// what to send next.
+async function clearLiveItem(){
+  await writeLiveChannel({kind: null, id: null});
+  renderConsoleContent();
+}
+async function setLearnerAccess(active){
+  if(!active && !confirm("Switch this learner's code off? They won't be able to continue until you switch it back on.")) return;
+  await writeLiveChannel({active});
+  renderConsole(document.getElementById("app"));
 }
 function openReferenceStandalone(){
   STATE.standalonePage = "reference";
@@ -1318,6 +1510,7 @@ function renderConsoleContent(){
 
 function overviewHtml(s){
   const age = fmtAge(s.dob, s.assessmentDate || todayDateStr());
+  const lc = STATE.liveChannel || {kind: null, id: null, active: true};
   return `
     <div class="grid" style="max-width:760px;">
       <div class="card">
@@ -1343,15 +1536,39 @@ function overviewHtml(s){
         </div>
       </div>
       <div class="card">
-        <h3>How the learner joins</h3>
-        <p>On the learner's device, open the same link you are using now (see any section on the left for a copy of it), and where it asks for a password or code, enter the short code for the item you want them to see, for example <strong>G7</strong> for the Grade 7 passage. Go to any section on the left and click <em>"Show learner code"</em> to see that item's code. You can read the code aloud over a video call, or type it in yourself if you're in the same room.</p>
-        <p class="note">Each code shows the learner only that one item: never a menu, never other grades, and never the phonological awareness items, which have no learner code at all. On the learner's own screen, a small "Enter a different code" button lets you move them straight to the next item without reopening the link.</p>
-        <p class="note">This is a practical safeguard, not bank-grade security, the same way the examiner password is. A code only ever reveals a letter chart, word chart, passage or word list, never a learner's name or scores, so there is nothing personal to protect if someone else sees or guesses one.</p>
+        <h3>Learner code</h3>
+        <p class="muted">Give the learner this one code for their whole visit. They type it in once, then wait - whatever you send to their screen from a section on the left shows up there on its own, no further typing needed.</p>
+        <div class="row" style="align-items:center;gap:12px;flex-wrap:wrap;margin-top:6px;">
+          <strong style="font-size:1.6rem;letter-spacing:3px;">${escapeHtml(s.code)}</strong>
+          <button class="btn small" onclick="copyLearnerSessionLink()">Copy learner link</button>
+        </div>
+        <div id="learnerLinkBox-overview"></div>
+        <div class="row" style="margin-top:12px;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span class="chip ${lc.active===false ? 'locked' : ''}">${lc.active===false ? "Code switched off" : "Code active"}</span>
+          ${lc.active===false
+            ? `<button class="btn small" onclick="setLearnerAccess(true)">Switch code back on</button>`
+            : `<button class="btn secondary small" onclick="setLearnerAccess(false)">Switch code off</button>`}
+        </div>
+        <p class="muted" style="font-size:.85rem;margin-top:6px;">Switch the code off once this learner's report is ready, so it no longer lets anyone in. You can switch it back on again later if you need to.</p>
+        <p class="note" style="margin-top:10px;">This is a practical safeguard, not bank-grade security, the same way the examiner password is. A code only ever shows whatever you choose to send - never a menu, never scores - so there is nothing personal to protect if someone else sees or guesses one.</p>
       </div>
       <div class="card">
         <h3>Danger zone</h3>
         <button class="btn danger small" onclick="deleteThisSession()">Delete this session</button>
       </div>
+    </div>
+  `;
+}
+function copyLearnerSessionLink(){
+  const s = STATE.session;
+  if(!s) return;
+  const url = baseUrl() + "#learner=" + b64urlEncode({sc: s.code});
+  const box = document.getElementById("learnerLinkBox-overview");
+  if(!box) return;
+  box.innerHTML = `
+    <div class="row" style="width:100%;max-width:420px;margin-top:8px;">
+      <input type="text" readonly value="${escapeHtml(url)}" onfocus="this.select()" id="learnerSessionLinkInput" />
+      <button class="btn small" onclick="copyLink('learnerSessionLinkInput')">Copy</button>
     </div>
   `;
 }
@@ -1439,6 +1656,22 @@ function mirrorHtml(kind,id){
   const payload = Object.assign({n: s ? s.learnerName : ""}, linkPayloadFor(kind,id));
   return learnerContentHtml(payload);
 }
+// Shared "send this to the learner" row, used by every section below
+// (reading passages, word lists, spelling, dictation, writing, word
+// ladder) now that there's just one learner code per session rather than
+// a new code per item.
+function liveSendRowHtml(kind, id){
+  const lc = STATE.liveChannel || {kind: null, id: null, active: true};
+  const isLiveHere = lc.kind === kind && String(lc.id) === String(id);
+  return `
+    <div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap;align-items:center;">
+      ${isLiveHere
+        ? `<span class="chip">Now on learner's screen</span><button class="btn secondary small" onclick="clearLiveItem()">Clear learner's screen</button>`
+        : `<button class="btn small" onclick="pushLiveItem('${kind}','${id}')">Send to learner's screen</button>`}
+      <button class="btn secondary small" onclick="enterLearnerModeDirectly('${kind}','${id}')">Hand this screen to the learner now</button>
+    </div>
+  `;
+}
 function stimulusBlockHtml(kind,id){
   const s = STATE.session;
   const skey = stimulusScoreKey(kind);
@@ -1456,10 +1689,7 @@ function stimulusBlockHtml(kind,id){
         <summary style="cursor:pointer;font-weight:bold;">Learner's screen (shown here too, so you can follow along while marking)</summary>
         <div class="mirror-frame">${mirrorHtml(kind,id)}</div>
       </details>
-      <div class="row">
-        <button class="btn small" onclick="showLearnerLink('${kind}','${id}')">Show learner code</button>
-      </div>
-      <div id="linkbox-${kind}-${id}"></div>
+      ${liveSendRowHtml(kind, id)}
       <div class="row" style="margin-top:14px;align-items:flex-end;">
         <div class="col">
           <label>Timer</label>
@@ -1496,38 +1726,15 @@ function scoreSummaryHtml(kind,id,rec,max){
     <div class="score-tile"><span class="num">${fmtTime(rec.seconds||0)}</span><span class="lbl">Time taken</span></div>
   </div>`;
 }
-const CAPTURE_KINDS = {spelling:1, dictation:1, writing:1};
-function showLearnerLink(kind,id){
-  const isCapture = !!CAPTURE_KINDS[kind];
-  const s = STATE.session;
-  const baseCode = codeForStimulus(kind,id);
-  const code = (isCapture && s) ? (baseCode + "-" + s.code) : baseCode;
-  const payload = Object.assign({n: s ? s.learnerName : ""}, linkPayloadFor(kind,id));
-  if(isCapture && s) payload.sc = s.code;
-  const url = baseUrl() + "#learner=" + b64urlEncode(payload);
-  const box = document.getElementById("linkbox-"+kind+"-"+id);
-  let captureNote = "";
-  if(isCapture){
-    captureNote = s
-      ? ` What ${escapeHtml(s.learnerName||"the learner")} types on their own device will appear back here within a few seconds.`
-      : ` Digital typing needs an open assessment session to report back to - open or start a session first, then come back to this code.`;
-  }
-  box.innerHTML = `
-    <div class="linkbox" style="flex-direction:column;align-items:flex-start;gap:8px;">
-      <div><span class="muted">Learner code:</span> <strong style="font-size:1.4rem;letter-spacing:3px;">${code}</strong></div>
-      <div class="row" style="width:100%;">
-        <input type="text" readonly value="${escapeHtml(url)}" onfocus="this.select()" id="linkinput-${kind}-${id}" />
-        <button class="btn small" onclick="copyLink('linkinput-${kind}-${id}')">Copy link</button>
-      </div>
-      <button class="btn clay small" onclick="enterLearnerModeDirectly('${kind}','${id}')">Hand this screen to the learner now</button>
-    </div>
-    <p class="muted" style="font-size:.85rem;margin-top:4px;">On the learner's own device, open the link above, or go to this tool and enter the code <strong>${code}</strong> where it asks for a password or code.${captureNote} On THIS device, "Hand this screen to the learner now" switches straight to their view instead - best if you're handing the same laptop or tablet back and forth - with a button on their screen afterwards to switch back to your console.</p>
-  `;
-}
+// Switches THIS device straight to the learner's view for one item - for
+// when the examiner hands their own screen/tablet to the child instead of
+// using a separate device. Also pushes the same item onto the live
+// channel so the two ways of sending something (this, and "Send to
+// learner's screen") always agree on what's current.
 function enterLearnerModeDirectly(kind, id){
   const s = STATE.session;
-  const isCapture = !!CAPTURE_KINDS[kind];
-  STATE.learnerItem = (isCapture && s) ? {kind, id, sc: s.code} : {kind, id};
+  if(s) writeLiveChannel({kind, id, active: true}); // fire-and-forget - the hand-off below doesn't need to wait on it
+  STATE.learnerItem = s ? {kind, id, sc: s.code} : {kind, id};
   route();
 }
 function copyLink(inputId){
@@ -1761,10 +1968,7 @@ function wordLadderHtml(){
         <select onchange="changeWordLadderBand(this.value)">
           ${[1,2,3,4,5,6,7,8,9].map(g=>`<option value="${g}" ${String(g)===String(band)?'selected':''}>Band ${g}</option>`).join("")}
         </select>
-        <div class="row" style="margin-top:8px;">
-          <button class="btn small" onclick="showLearnerLink('wordladder','${band}')">Show learner code</button>
-        </div>
-        <div id="linkbox-wordladder-${band}"></div>
+        ${liveSendRowHtml('wordladder', band)}
         <p class="note" style="margin-top:10px;">These words are fine for the learner to see (they read them aloud), so it's fine to show this band on their screen, hand it to them on paper, or just read from your own screen if they're sitting with you.</p>
         ${words.map((w,i) => `
           <div class="item-row">
@@ -1836,10 +2040,7 @@ function spellingHtml(){
         <select onchange="changeSpellingGrade(this.value)">
           ${[1,2,3,4,5,6,7,8,9].map(g=>`<option value="${g}" ${String(g)===String(grade)?'selected':''}>Grade ${g}</option>`).join("")}
         </select>
-        <div class="row" style="margin-top:8px;">
-          <button class="btn small" onclick="showLearnerLink('spelling','${grade}')">Show learner code</button>
-        </div>
-        <div id="linkbox-spelling-${grade}"></div>
+        ${liveSendRowHtml('spelling', grade)}
         <div class="note" style="margin-top:10px;font-size:.9rem;">
           <strong>Digital typing (optional):</strong> the learner can type their words on their own device, using the code or link above, instead of writing on paper. What they type is checked automatically against the word list and marked below within a few seconds; you can still click a tick or cross to correct any word yourself.
           <div class="row" style="margin-top:6px;justify-content:space-between;align-items:center;">
@@ -1908,10 +2109,7 @@ function dictationHtml(){
         <select onchange="changeDictationGrade(this.value)">
           ${[1,2,3,4,5,6,7,8,9].map(g=>`<option value="${g}" ${String(g)===String(grade)?'selected':''}>Grade ${g}</option>`).join("")}
         </select>
-        <div class="row" style="margin-top:8px;">
-          <button class="btn small" onclick="showLearnerLink('dictation','${grade}')">Show learner code</button>
-        </div>
-        <div id="linkbox-dictation-${grade}"></div>
+        ${liveSendRowHtml('dictation', grade)}
         <p class="note" style="margin-top:10px;"><strong>Sentence to read aloud (examiner only):</strong> "${escapeHtml(d.text)}" <span class="muted">(${d.words} words)</span></p>
         <div class="note" style="margin-top:10px;font-size:.9rem;">
           <strong>Digital typing (optional):</strong> the learner can type the sentence on their own device, using the code or link above, instead of writing on paper. What they type is automatically checked against the sentence above, word by word, and used to fill in "words spelled correctly" below within a few seconds. That simple word-by-word check can be thrown off if the learner adds or leaves out a whole word partway through, so please check it against what they actually typed, shown below, before relying on it.
@@ -1992,10 +2190,7 @@ function writingHtml(){
         <select onchange="changeWritingGrade(this.value)">
           ${[1,2,3,4,5,6,7,8,9].map(g=>`<option value="${g}" ${String(g)===String(grade)?'selected':''}>Grade ${g}</option>`).join("")}
         </select>
-        <div class="row" style="margin-top:8px;">
-          <button class="btn small" onclick="showLearnerLink('writing','${grade}')">Show learner code</button>
-        </div>
-        <div id="linkbox-writing-${grade}"></div>
+        ${liveSendRowHtml('writing', grade)}
         <p class="note" style="margin-top:10px;"><strong>Prompt (shown to learner):</strong> ${escapeHtml(w.prompt)}</p>
         <div class="note" style="margin-top:10px;font-size:.9rem;">
           <strong>Digital typing (optional):</strong> the learner can type their writing on their own device, using the code or link above, instead of writing on paper. Their typed response will appear below within a few seconds for you to read and score yourself.
