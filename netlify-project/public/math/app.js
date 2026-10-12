@@ -369,12 +369,14 @@ function normAnswer(w){
 }
 
 /* ============================================================
-   Learner codes for the four digital content areas. Number Sense has no
-   code at all - it is examiner-only, oral, marked on the console, so
-   there is never a reason to send a learner to a device for it.
-   A code is {prefix}{grade}, e.g. "P3" (Patterns, Grade 3). Exactly like
-   the reading tool, the compound form {code}-{SESSION} ties a learner's
-   typing to one open session so two learners' answers can never collide.
+   Legacy per-activity learner codes. These are no longer shown anywhere
+   in the console - every session now hands out just ONE code (its
+   session code, see the Overview tab) that the learner types once, with
+   the examiner then sending each activity to their screen in turn (see
+   pushLiveItem/startLearnerLivePolling). This old scheme - a code is
+   {prefix}{grade}, e.g. "P3" (Patterns, Grade 3), and {code}-{SESSION}
+   ties it to one open session - is kept working here only so an
+   already-given-out old-style code or link doesn't suddenly break.
    ============================================================ */
 function codeForItemSet(area, grade){
   return AREA_META[area].prefix + gradeLabel(grade);
@@ -532,7 +534,10 @@ const Store = {
   },
   async getSession(code){
     try{
-      const res = await fetch(`${API_BASE}/sessions?code=${encodeURIComponent(code)}`);
+      // cache: "no-store" matters here now that a learner's own device can
+      // call this (checking whether a typed code is a real session) - same
+      // reasoning as Capture.read above.
+      const res = await fetch(`${API_BASE}/sessions?code=${encodeURIComponent(code)}`, {cache: "no-store"});
       if(!res.ok) return null;
       return await res.json();
     }catch(e){ return null; }
@@ -574,6 +579,9 @@ const STATE = {
   timers: {},
   learnerItem: null,     // {area, grade, sc?} once a learner code/link has been opened on this device
   learnerSessionCode: null,
+  learnerEnded: false,     // true once this learner's code has been switched off by the examiner
+  learnerLivePollTimer: null, // only runs for the new one-code-per-session flow (see startLearnerLivePolling)
+  liveChannel: null,       // examiner's own cached copy of {area, grade, active} for the open session, so area tabs and Overview can show what's currently live without re-fetching every render
   saveStatus: "unknown",
   captureCache: {},
   capturePollTimer: null
@@ -601,6 +609,17 @@ function route(){
     // to write against. Setting it here is the fix.
     STATE.learnerItem = payload ? {area: payload.area, grade: payload.grade, sc: payload.sc} : null;
     STATE.learnerSessionCode = (payload && payload.sc) ? payload.sc : null;
+    // A link copied from the Overview tab's "Copy learner link" button
+    // only ever carries {sc} - no area/grade, because it is meant to be
+    // opened once at the START of the whole session, before the examiner
+    // has decided what to send first. That is the signal to show the
+    // waiting screen and start watching for whatever the examiner pushes,
+    // same as the bare-code login path below. An older-style link that
+    // already has an area+grade baked in (from before this feature, or
+    // from "Copy link" on an individual activity tab) keeps working
+    // exactly as it always has, with no live polling.
+    STATE.learnerEnded = false;
+    if(payload && payload.sc && !payload.area) startLearnerLivePolling();
     renderLearner(app, payload);
     return;
   }
@@ -636,8 +655,14 @@ document.addEventListener("DOMContentLoaded", route);
    ============================================================ */
 function renderLearner(app, payload){
   let inner = "";
-  if(!payload || !payload.area || !payload.grade){
+  if(!payload || (!payload.area && !payload.sc)){
     inner = '<div class="err">That code or link isn\'t valid. Please ask your examiner for a fresh one.</div>';
+  } else if(payload.sc && STATE.learnerEnded){
+    inner = learnerEndedHtml();
+  } else if(payload.sc && !payload.area){
+    // Logged in with a whole-session code (or a session-only link) and the
+    // examiner hasn't sent anything to this screen yet.
+    inner = learnerWaitingHtml();
   } else {
     inner = learnerContentHtml(payload);
   }
@@ -653,11 +678,84 @@ function renderLearner(app, payload){
       <div class="centered">
         <div class="col" style="align-items:center;width:100%;">
           ${inner}
-          ${STATE.learnerItem ? `<button class="btn secondary small no-print" style="margin-top:16px;" onclick="STATE.learnerItem=null; STATE.learnerSessionCode=null; route();">${STATE.examinerAuthed ? "Done - back to examiner console" : "Enter a different code"}</button>` : ''}
+          ${STATE.learnerItem ? `<button class="btn secondary small no-print" style="margin-top:16px;" onclick="exitLearnerMode()">${STATE.examinerAuthed ? "Done - back to examiner console" : "Enter a different code"}</button>` : ''}
         </div>
       </div>
     </div>
   `;
+}
+function exitLearnerMode(){
+  stopLearnerLivePolling();
+  STATE.learnerItem = null;
+  STATE.learnerSessionCode = null;
+  STATE.learnerEnded = false;
+  route();
+}
+// A simple spinning flower for the "nothing sent yet" waiting screen - see
+// the .waiting-flower rule in styles.css for the spin animation.
+const FLOWER_SVG = `<svg class="waiting-flower" width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <circle cx="32" cy="15" r="11" fill="#F6C6D0"/>
+  <circle cx="49" cy="32" r="11" fill="#FBE2A7"/>
+  <circle cx="32" cy="49" r="11" fill="#C7E8CA"/>
+  <circle cx="15" cy="32" r="11" fill="#BFE1F6"/>
+  <circle cx="32" cy="32" r="10" fill="#F3A6B8"/>
+</svg>`;
+function learnerWaitingHtml(){
+  return `<div class="reading-sheet" style="max-width:420px;text-align:center;">
+    ${FLOWER_SVG}
+    <p style="font-size:1.25rem;margin-top:14px;">Getting your activity ready...</p>
+    <p class="muted">Sit tight - your teacher will send the next activity to your screen in just a moment.</p>
+  </div>`;
+}
+function learnerEndedHtml(){
+  return `<div class="reading-sheet" style="max-width:420px;text-align:center;">
+    <p style="font-size:1.25rem;">All done for today!</p>
+    <p class="muted">This code has been switched off. Please check with your examiner.</p>
+    <button type="button" class="btn secondary small no-print" style="margin-top:10px;" onclick="STATE.learnerEnded=false; startLearnerLivePolling();">Check again</button>
+  </div>`;
+}
+// Only used by the new one-code-per-session flow (a bare session code, or
+// a "Copy learner link" link that carries just {sc}). The old per-activity
+// codes/links keep working exactly as before, with no polling - see the
+// comments where this is called from.
+function stopLearnerLivePolling(){
+  if(STATE.learnerLivePollTimer){ clearInterval(STATE.learnerLivePollTimer); STATE.learnerLivePollTimer = null; }
+}
+function startLearnerLivePolling(){
+  stopLearnerLivePolling();
+  const sc = STATE.learnerSessionCode;
+  if(!sc) return;
+  let inFlight = false;
+  const tick = async () => {
+    if(inFlight) return;
+    inFlight = true;
+    try{
+      // Reuses the capture channel's own storage (kind "_live", a single
+      // slot per session) rather than the full session record, so this
+      // never risks overwriting the examiner's scores with a stale copy -
+      // see the comment above pushLiveItem() for why.
+      const live = await Capture.read(sc, "_live", "_");
+      const active = !live || live.active !== false;
+      if(!active){
+        STATE.learnerEnded = true;
+        stopLearnerLivePolling();
+        renderLearner(document.getElementById("app"), {sc});
+        return;
+      }
+      const liveArea = live ? (live.area || null) : null;
+      const liveGrade = live ? (live.grade || null) : null;
+      const curArea = STATE.learnerItem ? STATE.learnerItem.area : null;
+      const curGrade = STATE.learnerItem ? STATE.learnerItem.grade : null;
+      if(liveArea !== curArea || String(liveGrade) !== String(curGrade)){
+        STATE.learnerItem = {area: liveArea, grade: liveGrade, sc};
+        renderLearner(document.getElementById("app"), STATE.learnerItem);
+      }
+    } finally {
+      inFlight = false;
+    }
+  };
+  tick();
+  STATE.learnerLivePollTimer = setInterval(tick, 500);
 }
 function noSessionNoticeHtml(){
   if(STATE.learnerSessionCode) return "";
@@ -837,7 +935,7 @@ function renderExaminerLogin(app){
     </div>
   `;
 }
-function tryExaminerLogin(){
+async function tryExaminerLogin(){
   const val = document.getElementById("pwInput").value.trim();
   if(val === EXAMINER_PASSWORD){
     STATE.examinerAuthed = true;
@@ -860,6 +958,23 @@ function tryExaminerLogin(){
     if(baseItem && sessionPart){
       STATE.learnerItem = Object.assign({}, baseItem, {sc: sessionPart});
       STATE.learnerSessionCode = sessionPart;
+      route();
+      return;
+    }
+  }
+  // Not a password and not one of the old per-activity codes - see if it's
+  // a whole-session code (one code for the entire assessment, typed once).
+  // This is the new, recommended way in: it logs the learner straight into
+  // the waiting screen with nothing chosen yet, and whatever the examiner
+  // sends to their screen from the console shows up here on its own - see
+  // startLearnerLivePolling().
+  if(upper.length >= 4){
+    const sess = await Store.getSession(upper);
+    if(sess){
+      STATE.learnerItem = {area: null, grade: null, sc: upper};
+      STATE.learnerSessionCode = upper;
+      STATE.learnerEnded = false;
+      startLearnerLivePolling();
       route();
       return;
     }
@@ -960,6 +1075,7 @@ async function createSession(){
   setSaveStatus(ok);
   STATE.session = sess;
   STATE.navSection = "overview";
+  STATE.liveChannel = {area: null, grade: null, active: true};
   route();
 }
 async function openSession(code){
@@ -970,18 +1086,68 @@ async function openSession(code){
     STATE.session = sess;
     STATE.navSection = "overview";
     setSaveStatus(true);
+    await refreshLiveChannel();
     route();
   }
 }
 function closeSession(){
   stopCapturePolling();
   STATE.session = null;
+  STATE.liveChannel = null;
   route();
 }
 async function persistSession(){
   if(!STATE.session) return;
   const ok = await Store.saveSession(STATE.session);
   setSaveStatus(ok);
+}
+
+/* ============================================================
+   Live channel: what the learner's screen is currently showing for the
+   open session - one small record per session (reusing the capture
+   endpoint's storage with the made-up kind "_live"), kept completely
+   separate from the session record itself (which holds the learner's
+   name, dob, scores, etc). That separation is deliberate: the learner's
+   own device reads this record every half-second while waiting for the
+   examiner to send something, and it must NEVER write the full session
+   back (it has no safe way to merge with whatever the examiner might be
+   editing on their side at that same moment), so it only ever reads here
+   and the examiner is the only one who ever writes to it.
+   {area, grade, active} - area/grade null means "nothing sent yet", and
+   active:false means the examiner has switched this learner's code off.
+   No record at all (brand-new session, never touched) means the same as
+   {area:null, grade:null, active:true}.
+   ============================================================ */
+async function refreshLiveChannel(){
+  const s = STATE.session;
+  if(!s){ STATE.liveChannel = null; return; }
+  const live = await Capture.read(s.code, "_live", "_");
+  STATE.liveChannel = live || {area: null, grade: null, active: true};
+}
+async function writeLiveChannel(patch){
+  const s = STATE.session;
+  if(!s) return;
+  STATE.liveChannel = Object.assign({area: null, grade: null, active: true}, STATE.liveChannel, patch);
+  await Capture.write(s.code, "_live", "_", STATE.liveChannel);
+}
+// Sends one content area + grade to the learner's screen right now.
+// Pushing something new also makes sure the code is switched on - there
+// would be no point sending an activity to a learner who's locked out.
+async function pushLiveItem(area, grade){
+  await writeLiveChannel({area, grade, active: true});
+  renderConsoleContent();
+}
+// Clears the learner's screen back to the waiting flower, without
+// switching the code off - for the moment between one activity and the
+// next while deciding what to send.
+async function clearLiveItem(){
+  await writeLiveChannel({area: null, grade: null});
+  renderConsoleContent();
+}
+async function setLearnerAccess(active){
+  if(!active && !confirm("Switch this learner's code off? They won't be able to continue until you switch it back on.")) return;
+  await writeLiveChannel({active});
+  renderConsole(document.getElementById("app"));
 }
 function openReferenceStandalone(){
   STATE.standalonePage = "reference";
@@ -1072,7 +1238,15 @@ async function renderConsole(app){
 function setNav(key){
   STATE.navSection = key;
   if(AREA_META[key] && AREA_META[key].mode === "digital"){
-    startCapturePolling(key, STATE.areaGrade[key] || STATE.session.gradeStart);
+    const grade = STATE.areaGrade[key] || STATE.session.gradeStart;
+    startCapturePolling(key, grade);
+    // Moving to a new content area on the examiner's own screen now also
+    // sends it straight to the learner's screen - no separate click
+    // needed for the normal "move through the areas in order" case. The
+    // "Send to learner's screen" / "Clear learner's screen" buttons still
+    // work as before for re-sending after a clear, or sending the same
+    // area again after switching the grade.
+    pushLiveItem(key, grade);
   } else {
     stopCapturePolling();
   }
@@ -1099,6 +1273,7 @@ function renderConsoleContent(){
    ============================================================ */
 function overviewHtml(s){
   const age = fmtAge(s.dob, s.assessmentDate);
+  const lc = STATE.liveChannel || {area: null, grade: null, active: true};
   return `
     <div class="grid" style="max-width:820px;">
       <h2 style="margin:0;">Overview</h2>
@@ -1126,13 +1301,38 @@ function overviewHtml(s){
         </div>
       </div>
       <div class="card">
-        <h3>Session code</h3>
-        <p class="muted">Code: <strong>${escapeHtml(s.code)}</strong>. Each content area's learner code or link (shown on that area's tab) is tied to this code, so a learner's typing always comes back to this session, never a different one.</p>
+        <h3>Learner code</h3>
+        <p class="muted">Give the learner this one code for their whole visit. They type it in once, then wait - whatever you send to their screen from a content area tab shows up there on its own, no further typing needed.</p>
+        <div class="row" style="align-items:center;gap:12px;flex-wrap:wrap;margin-top:6px;">
+          <strong style="font-size:1.6rem;letter-spacing:3px;">${escapeHtml(s.code)}</strong>
+          <button class="btn small" onclick="copyLearnerSessionLink()">Copy learner link</button>
+        </div>
+        <div id="learnerLinkBox-overview"></div>
+        <div class="row" style="margin-top:12px;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span class="chip ${lc.active===false ? 'locked' : ''}">${lc.active===false ? "Code switched off" : "Code active"}</span>
+          ${lc.active===false
+            ? `<button class="btn small" onclick="setLearnerAccess(true)">Switch code back on</button>`
+            : `<button class="btn secondary small" onclick="setLearnerAccess(false)">Switch code off</button>`}
+        </div>
+        <p class="muted" style="font-size:.85rem;margin-top:6px;">Switch the code off once this learner's report is ready, so it no longer lets anyone in. You can switch it back on again later if you need to.</p>
       </div>
       <div class="card">
         <h3>Danger zone</h3>
         <button class="btn danger small" onclick="deleteThisSession()">Delete this session</button>
       </div>
+    </div>
+  `;
+}
+function copyLearnerSessionLink(){
+  const s = STATE.session;
+  if(!s) return;
+  const url = baseUrl() + "#learner=" + b64urlEncode({sc: s.code});
+  const box = document.getElementById("learnerLinkBox-overview");
+  if(!box) return;
+  box.innerHTML = `
+    <div class="row" style="width:100%;max-width:420px;margin-top:8px;">
+      <input type="text" readonly value="${escapeHtml(url)}" onfocus="this.select()" id="learnerSessionLinkInput" />
+      <button class="btn small" onclick="copyLink('learnerSessionLinkInput')">Copy</button>
     </div>
   `;
 }
@@ -1203,7 +1403,12 @@ function oralAreaHtml(area){
 }
 function changeAreaGrade(area, g){
   STATE.areaGrade[area] = g;
-  if(AREA_META[area].mode === "digital") startCapturePolling(area, g);
+  if(AREA_META[area].mode === "digital"){
+    startCapturePolling(area, g);
+    // Changing the grade-level dropdown re-sends this area at the new
+    // grade, same reasoning as setNav() above.
+    pushLiveItem(area, g);
+  }
   renderConsoleContent();
 }
 async function markOralItem(area, grade, i, val){
@@ -1234,19 +1439,23 @@ function digitalAreaHtml(area){
   const marks = rec.marks || [];
   const correctCount = marks.filter(x=>x===true).length;
   const placement = placementGradeFor(area);
+  const lc = STATE.liveChannel || {area: null, grade: null, active: true};
+  const isLiveHere = lc.area === area && String(lc.grade) === String(grade);
   return `
     <div class="grid" style="max-width:820px;">
       <h2 style="margin:0;">${escapeHtml(meta.label)}</h2>
-      <p class="note">${escapeHtml(meta.blurb)} The learner answers on their own device using the code or link below; you can still correct any item yourself.</p>
+      <p class="note">${escapeHtml(meta.blurb)} Send this to the learner's screen with their one session code already entered; you can still correct any item yourself.</p>
       <div class="card">
         <label>Grade-level item set</label>
         <select onchange="changeAreaGrade('${area}',this.value)">
           ${GRADE_RANGE.map(g=>`<option value="${g}" ${String(g)===String(grade)?'selected':''}>Grade ${gradeLabel(g)}</option>`).join("")}
         </select>
-        <div class="row" style="margin-top:8px;">
-          <button class="btn small" onclick="showLearnerLink('${area}','${grade}')">Show learner code</button>
+        <div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap;align-items:center;">
+          ${isLiveHere
+            ? `<span class="chip">Now on learner's screen</span><button class="btn secondary small" onclick="clearLiveItem()">Clear learner's screen</button>`
+            : `<button class="btn small" onclick="pushLiveItem('${area}','${grade}')">Send to learner's screen</button>`}
+          <button class="btn secondary small" onclick="enterLearnerModeDirectly('${area}','${grade}')">Hand this screen to the learner now</button>
         </div>
-        <div id="linkbox-${area}-${grade}"></div>
         ${!items ? `<p class="muted" style="margin-top:14px;">Grade ${escapeHtml(grade)} items for ${escapeHtml(meta.shortLabel)} aren't written yet - coming in a follow-up update.</p>` : `
         <div class="note" style="margin-top:10px;font-size:.9rem;">
           <div class="row" style="justify-content:space-between;align-items:center;">
@@ -1289,31 +1498,14 @@ async function markDigitalItem(area, grade, i, val){
   renderConsoleContent();
 }
 const CAPTURE_KINDS = DIGITAL_AREAS; // kept as a plain array; mirrors the reading tool's CAPTURE_KINDS naming
-function showLearnerLink(area, grade){
-  const s = STATE.session;
-  const baseCode = codeForItemSet(area, grade);
-  const code = s ? (baseCode + "-" + s.code) : baseCode;
-  const payload = {area, grade};
-  if(s) payload.sc = s.code;
-  const url = baseUrl() + "#learner=" + b64urlEncode(payload);
-  const box = document.getElementById("linkbox-"+area+"-"+grade);
-  const captureNote = s
-    ? ` What the learner answers on their own device will appear back here within a few seconds.`
-    : ` Open or start a session first so this code has somewhere to report back to.`;
-  box.innerHTML = `
-    <div class="linkbox" style="flex-direction:column;align-items:flex-start;gap:8px;">
-      <div><span class="muted">Learner code:</span> <strong style="font-size:1.4rem;letter-spacing:3px;">${code}</strong></div>
-      <div class="row" style="width:100%;">
-        <input type="text" readonly value="${escapeHtml(url)}" onfocus="this.select()" id="linkinput-${area}-${grade}" />
-        <button class="btn small" onclick="copyLink('linkinput-${area}-${grade}')">Copy link</button>
-      </div>
-      <button class="btn clay small" onclick="enterLearnerModeDirectly('${area}','${grade}')">Hand this screen to the learner now</button>
-    </div>
-    <p class="muted" style="font-size:.85rem;margin-top:4px;">On the learner's own device, open the link above, or go to this tool and enter the code <strong>${code}</strong> where it asks for a password or code.${captureNote} On THIS device, "Hand this screen to the learner now" switches straight to their view instead.</p>
-  `;
-}
+// Switches THIS device straight to the learner's view for one area/grade -
+// for when the examiner hands their own screen/tablet to the child instead
+// of using a separate device. Also pushes the same area/grade onto the
+// live channel so the two ways of sending an activity (this, and the
+// "Send to learner's screen" button) always agree on what's current.
 function enterLearnerModeDirectly(area, grade){
   const s = STATE.session;
+  if(s) writeLiveChannel({area, grade, active: true}); // fire-and-forget - the hand-off below doesn't need to wait on it
   STATE.learnerItem = s ? {area, grade, sc: s.code} : {area, grade};
   route();
 }
