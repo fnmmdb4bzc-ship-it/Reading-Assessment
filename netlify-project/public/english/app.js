@@ -1477,9 +1477,19 @@ async function renderConsole(app){
 }
 function setNav(key){
   STATE.navSection = key;
-  if(key==="spelling") startCapturePolling("spelling", STATE.spellingGrade || STATE.session.gradeStart);
-  else if(key==="dictation") startCapturePolling("dictation", STATE.dictationGrade || STATE.session.gradeStart);
-  else if(key==="writing") startCapturePolling("writing", STATE.writingGrade || STATE.session.gradeStart);
+  // Moving to a content area that has a single "current" item (the four
+  // below, each controlled by one grade/band dropdown) now also sends it
+  // straight to the learner's screen, so the examiner doesn't have to
+  // separately click "Send to learner's screen" every time they move on
+  // to the next area. The button still works as before, for re-sending
+  // after a clear or after changing the dropdown. Areas with several
+  // items on one screen at once (letters, words, passages, decoding)
+  // keep their own per-item "Send" buttons only, since there's no single
+  // current one to default to.
+  if(key==="spelling"){ const g = STATE.spellingGrade || STATE.session.gradeStart; startCapturePolling("spelling", g); pushLiveItem("spelling", g); }
+  else if(key==="dictation"){ const g = STATE.dictationGrade || STATE.session.gradeStart; startCapturePolling("dictation", g); pushLiveItem("dictation", g); }
+  else if(key==="writing"){ const g = STATE.writingGrade || STATE.session.gradeStart; startCapturePolling("writing", g); pushLiveItem("writing", g); }
+  else if(key==="wordladder"){ pushLiveItem("wordladder", STATE.wordLadderBand || STATE.session.gradeStart); stopCapturePolling(); }
   else stopCapturePolling();
   renderConsole(document.getElementById("app"));
 }
@@ -1996,7 +2006,7 @@ function wordLadderHtml(){
     </div>
   `;
 }
-function changeWordLadderBand(g){ STATE.wordLadderBand = g; renderConsoleContent(); }
+function changeWordLadderBand(g){ STATE.wordLadderBand = g; pushLiveItem("wordladder", g); renderConsoleContent(); }
 async function markWordLadderWord(band,i,val){
   const s = STATE.session;
   if(!s.scores.wordladder) s.scores.wordladder = {};
@@ -2073,7 +2083,7 @@ function spellingHtml(){
     </div>
   `;
 }
-function changeSpellingGrade(g){ STATE.spellingGrade = g; startCapturePolling("spelling", g); renderConsoleContent(); }
+function changeSpellingGrade(g){ STATE.spellingGrade = g; startCapturePolling("spelling", g); pushLiveItem("spelling", g); renderConsoleContent(); }
 async function markSpellingWord(grade,i,val){
   const s = STATE.session;
   if(!s.scores.spelling) s.scores.spelling = {};
@@ -2143,7 +2153,7 @@ function dictationHtml(){
     </div>
   `;
 }
-function changeDictationGrade(g){ STATE.dictationGrade = g; startCapturePolling("dictation", g); renderConsoleContent(); }
+function changeDictationGrade(g){ STATE.dictationGrade = g; startCapturePolling("dictation", g); pushLiveItem("dictation", g); renderConsoleContent(); }
 async function markDictationCriterion(grade,i,val){
   const s = STATE.session;
   if(!s.scores.dictation) s.scores.dictation = {};
@@ -2220,7 +2230,7 @@ function writingHtml(){
     </div>
   `;
 }
-function changeWritingGrade(g){ STATE.writingGrade = g; startCapturePolling("writing", g); renderConsoleContent(); }
+function changeWritingGrade(g){ STATE.writingGrade = g; startCapturePolling("writing", g); pushLiveItem("writing", g); renderConsoleContent(); }
 async function markWritingCriterion(grade,i,val){
   const s = STATE.session;
   if(!s.scores.writing) s.scores.writing = {};
