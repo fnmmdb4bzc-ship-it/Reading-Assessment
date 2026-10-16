@@ -30,6 +30,16 @@
   status = 200
 
 [[redirects]]
+  from = "/api/afrikaansfal/sessions"
+  to = "/.netlify/functions/sessions?subject=afrikaansfal"
+  status = 200
+
+[[redirects]]
+  from = "/api/afrikaansfal/capture"
+  to = "/.netlify/functions/capture?subject=afrikaansfal"
+  status = 200
+
+[[redirects]]
   from = "/api/math/sessions"
   to = "/.netlify/functions/sessions?subject=math"
   status = 200
