@@ -98,6 +98,13 @@ function escapeHtml(s){
 function _svgIcon(inner, vb){
   return `<svg viewBox="0 0 ${vb||48} ${vb||48}" width="100%" height="100%" aria-hidden="true" focusable="false">${inner}</svg>`;
 }
+// A real photo/illustration used as an ICON_MAP entry (as opposed to an
+// emoji or _svgIcon's inline vector) - for a word an emoji can't show
+// clearly or gets flat-out wrong (see "sit" below, which used to be a
+// chair emoji - a picture of furniture, not of a child sitting). Returns
+// a plain marker string the renderers below recognise by its "IMG:"
+// prefix; the real work is just remembering the filename.
+function _imgIcon(filename){ return "IMG:" + filename; }
 const ICON_MAP = {
   // Family (Luister en Praat, Grade 1: "Myself and My Family")
   "pa": "👨", "ma": "👩", "ouma": "👵", "oupa": "👴", "sussie": "👧", "boetie": "👦",
@@ -111,8 +118,14 @@ const ICON_MAP = {
   "appel": "🍎", "piesang": "🍌", "brood": "🍞", "melk": "🥛", "vleis": "🍖",
   // Clothes (Grade 1 "Clothes")
   "hemp": "👕", "broek": "👖", "skoene": "👟", "hoed": "🎩",
-  // Actions - "responding physically to simple instructions" (Grade 1-2)
-  "klap": "👏", "spring": "🤸", "sit": "🪑", "staan": "🧍", "loop": "🚶",
+  // Actions - "responding physically to simple instructions" (Grade 1-2).
+  // Real pictures of a child doing each action, not emoji - "sit" in
+  // particular used to be a chair emoji (furniture, not the action of
+  // sitting), which risked teaching the wrong thing rather than just
+  // looking plain.
+  "klap": _imgIcon("action-klap.png"), "spring": _imgIcon("action-spring.png"),
+  "sit": _imgIcon("action-sit.png"), "staan": _imgIcon("action-staan.png"),
+  "loop": _imgIcon("action-loop.png"),
   // Weather and sky (Grade 1 shapes/colours groundwork, general vocabulary)
   "wolk": "☁️", "reën": "🌧️",
   "son": _svgIcon(`<g fill="#E8A33D"><circle cx="24" cy="24" r="11"/><g stroke="#E8A33D" stroke-width="3" stroke-linecap="round"><line x1="24" y1="2" x2="24" y2="9"/><line x1="24" y1="39" x2="24" y2="46"/><line x1="2" y1="24" x2="9" y2="24"/><line x1="39" y1="24" x2="46" y2="24"/><line x1="8" y1="8" x2="13" y2="13"/><line x1="35" y1="35" x2="40" y2="40"/><line x1="40" y1="8" x2="35" y2="13"/><line x1="13" y1="35" x2="8" y2="40"/></g></g>`),
@@ -170,6 +183,10 @@ function visualTokenHtml(raw, size){
   const icon = iconForToken(raw);
   const label = `<span class="visual-caption">${escapeHtml(raw)}</span>`;
   if(!icon) return `<span class="visual-token text-only">${escapeHtml(raw)}</span>`;
+  if(icon.startsWith("IMG:")){
+    const box = `<span class="visual-icon" style="width:${size||40}px;height:${size||40}px;display:inline-flex;align-items:center;justify-content:center;"><img src="${escapeHtml(icon.slice(4))}" alt="" style="max-width:100%;max-height:100%;object-fit:contain;" /></span>`;
+    return `<span class="visual-token">${box}${label}</span>`;
+  }
   const isEmoji = !icon.startsWith("<svg");
   const box = isEmoji
     ? `<span class="visual-icon emoji" style="font-size:${size||40}px;line-height:1;">${icon}</span>`
@@ -191,11 +208,27 @@ function picStimulusHtml(v){
   const icon = ICON_MAP[String(v.icon||'').trim().toLowerCase()];
   if(!icon) return "";
   const size = v.size || 84;
+  if(icon.startsWith("IMG:")){
+    return `<div style="display:flex;justify-content:center;margin:8px 0 10px;"><img src="${escapeHtml(icon.slice(4))}" alt="" style="max-width:${size}px;width:100%;height:auto;" /></div>`;
+  }
   const isEmoji = !icon.startsWith("<svg");
   const box = isEmoji
     ? `<span class="visual-icon emoji" style="font-size:${size}px;line-height:1;">${icon}</span>`
     : `<span class="visual-icon" style="width:${size}px;height:${size}px;display:inline-block;">${icon}</span>`;
   return `<div style="display:flex;justify-content:center;margin:8px 0 10px;">${box}</div>`;
+}
+// A real photo/illustration (as opposed to picStimulusHtml's single
+// ICON_MAP glyph) shown above a question - for a scene with more than one
+// thing in it, where a single emoji/SVG icon can't carry the whole
+// picture. v.src is a plain filename served alongside this app's own
+// files (e.g. "family.png"), v.alt is the Afrikaans word read aloud by
+// the alt text, and v.maxWidth caps how wide it renders (same idea as
+// picStimulusHtml's size, just for a rectangular image instead of a
+// square icon).
+function imgStimulusHtml(v){
+  if(!v.src) return "";
+  const maxWidth = v.maxWidth || 320;
+  return `<div style="display:flex;justify-content:center;margin:8px 0 10px;"><img src="${escapeHtml(v.src)}" alt="${escapeHtml(v.alt||'')}" style="max-width:${maxWidth}px;width:100%;height:auto;border-radius:14px;border:2px solid #8a8070;" /></div>`;
 }
 // Dispatches on item.visual.type to render the right stimulus picture
 // above a question. Returns "" when the item has no visual field, so
@@ -204,6 +237,7 @@ function stimulusHtml(item){
   const v = item && item.visual;
   if(!v) return "";
   if(v.type === "pic") return picStimulusHtml(v);
+  if(v.type === "img") return imgStimulusHtml(v);
   return "";
 }
 function b64urlEncode(obj){
@@ -1520,20 +1554,26 @@ function falReferenceBookletHtml(){
    to a learner or leave on a desk.
    ============================================================ */
 function falResponseItemHtml(it, idx){
+  const stim = stimulusHtml(it);
   if(it.type === "choice"){
+    const optionCells = it.options.map(opt => `
+      <span style="display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:2px solid #8a8070;border-radius:12px;padding:8px 12px;min-width:56px;min-height:56px;">${visualTokenHtml(opt, 44)}</span>
+    `).join("");
     return `
-      <div style="margin-bottom:14px;">
+      <div style="margin-bottom:16px;">
         <div style="margin-bottom:6px;">${idx+1}. ${escapeHtml(it.prompt)}</div>
-        <div class="row" style="gap:18px;flex-wrap:wrap;padding-left:22px;">
-          ${it.options.map(opt => `<span style="white-space:nowrap;">&#9711; ${escapeHtml(opt)}</span>`).join("")}
-        </div>
+        ${stim}
+        <div class="row" style="gap:14px;flex-wrap:wrap;padding-left:22px;margin-top:4px;">${optionCells}</div>
       </div>
     `;
   }
   return `
-    <div class="row" style="align-items:baseline;gap:10px;margin-bottom:12px;">
-      <span style="flex:1;">${idx+1}. ${escapeHtml(it.prompt)}</span>
-      <span style="width:120px;border-bottom:1px solid #333;height:26px;"></span>
+    <div style="margin-bottom:14px;">
+      <div style="margin-bottom:4px;">${idx+1}. ${escapeHtml(it.prompt)}</div>
+      ${stim}
+      <div style="padding-left:22px;margin-top:4px;">
+        <span style="display:inline-block;width:120px;border-bottom:1px solid #333;height:26px;"></span>
+      </div>
     </div>
   `;
 }
@@ -1547,7 +1587,7 @@ function falResponseSheetsHtml(){
         <div class="ref-block ref-break">
           <h3>${escapeHtml(meta.label)}, Grade ${gradeLabel(g)}</h3>
           ${sheetHeaderHtml()}
-          <p class="muted" style="margin-bottom:14px;">Answer each question below. For questions with choices, circle your answer.</p>
+          <p class="muted" style="margin-bottom:14px;">Answer each question below. For questions with choices, circle the picture that is your answer.</p>
           <div style="max-width:560px;">${items.map((it,i) => falResponseItemHtml(it,i)).join("")}</div>
         </div>
       `;
