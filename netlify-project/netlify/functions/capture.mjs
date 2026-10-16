@@ -13,16 +13,18 @@ const CORS = {
   "cache-control": "no-store, no-cache, must-revalidate"
 };
 
-const VALID_SUBJECTS = ["english", "afrikaans", "math"];
+const VALID_SUBJECTS = ["english", "afrikaans", "afrikaansfal", "math"];
 
 // Same reasoning as sessions.mjs: English keeps the original standalone
 // tool's store name ("captures", no suffix) so in-progress digital
 // capture (spelling/dictation/writing typed on the learner's device)
 // already live at dsetletsread.netlify.app keeps working with no
-// migration. Afrikaans and Math get their own new, scoped names.
+// migration. Afrikaans, Afrikaans FAL and Math get their own new, scoped
+// names.
 const CAPTURE_STORE_NAME = {
   english: "captures",
   afrikaans: "captures-afrikaans",
+  afrikaansfal: "captures-afrikaansfal",
   math: "captures-math",
   default: "captures-default"
 };

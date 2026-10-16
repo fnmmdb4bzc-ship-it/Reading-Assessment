@@ -5,21 +5,26 @@ const CORS = {
   "content-type": "application/json",
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
-  "access-control-allow-headers": "content-type"
+  "access-control-allow-headers": "content-type",
+  // Same reasoning as capture.mjs: a learner's device now checks a typed
+  // code against this endpoint too, so a cached stale response here could
+  // make a valid code look invalid (or vice versa) until a hard refresh.
+  "cache-control": "no-store, no-cache, must-revalidate"
 };
 
-const VALID_SUBJECTS = ["english", "afrikaans", "math"];
+const VALID_SUBJECTS = ["english", "afrikaans", "afrikaansfal", "math"];
 
 // English keeps the exact store name the original standalone reading
 // tool used ("sessions", no suffix), so this unified app reads and
 // writes the SAME Netlify Blobs store that's already live at
 // dsetletsread.netlify.app - every learner session already recorded
-// there keeps showing up here with no migration step. Afrikaans and
-// Math have never been deployed under this app before, so they get
-// their own new, subject-scoped store names.
+// there keeps showing up here with no migration step. Afrikaans, Afrikaans
+// FAL and Math have never been deployed under this app before, so they
+// get their own new, subject-scoped store names.
 const SESSIONS_STORE_NAME = {
   english: "sessions",
   afrikaans: "sessions-afrikaans",
+  afrikaansfal: "sessions-afrikaansfal",
   math: "sessions-math",
   default: "sessions-default"
 };
