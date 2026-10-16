@@ -145,8 +145,51 @@ const ICON_MAP = {
   // plain emoji where one exists and already reads clearly.
   "rope": "🪢", "brick": "🧱", "cup": "🥛",
   "breakfast": "🍳", "supper": "🍽️",
-  "pear": "🍐", "orange": "🍊"
+  "pear": "🍐", "orange": "🍊",
+  // Added for Data Handling pictograph/bar-graph stimuli and the
+  // "count the pictures" items that replace tally marks at Grade 1
+  // (see pictographStimulusHtml / PICTOGRAPH note below).
+  "dog": "🐶", "cat": "🐱", "fish": "🐟",
+  "learner": "🧒", "child": "🧒",
+  "soccer": "⚽", "netball": "🏐"
 };
+// Rough relative SIZE (not weight/capacity in real units - just "does
+// this look bigger or smaller than the other option on screen") for the
+// Measurement items that ask a child to compare two concrete objects
+// (longer/shorter, heavier/lighter, holds more/less). Used only to scale
+// each option's icon in measurementComparisonHtml below, so a child can
+// SEE which one is bigger rather than only read the words - this is
+// a visual aid, not a claim about exact real-world proportions.
+const MEASURE_REL_SIZE = {
+  "pencil": 2, "car": 10, "feather": 1, "stone": 5,
+  "teaspoon": 1, "bucket": 8, "worm": 2, "snake": 6,
+  "rope": 6, "brick": 5, "cup": 2
+};
+// For a Measurement "choice" item comparing two (or more) concrete
+// objects (e.g. "a rope" vs "a pencil"), renders each option's icon at a
+// size scaled to MEASURE_REL_SIZE so the bigger/longer/heavier thing
+// visibly looks bigger on screen - not just same-size icons with
+// different captions. Falls back to the normal same-size rendering
+// (returns null) when we don't have a size for every option, so content
+// without a known size relation still displays normally.
+function measurementComparisonHtml(options){
+  const tokens = options.map(opt => {
+    let t = String(opt).trim().toLowerCase().replace(/^(a|an|the)\s+/,'').replace(/[.?!]+$/,'');
+    if(MEASURE_REL_SIZE[t] != null) return t;
+    const words = t.split(/\s+/);
+    const last = words[words.length-1];
+    if(MEASURE_REL_SIZE[last] != null) return last;
+    return null;
+  });
+  if(tokens.some(t => t == null)) return null;
+  const values = tokens.map(t => MEASURE_REL_SIZE[t]);
+  const lo = Math.min(...values), hi = Math.max(...values);
+  const MIN_PX = 34, MAX_PX = 84;
+  return options.map((opt, i) => {
+    const size = (hi === lo) ? 56 : Math.round(MIN_PX + (values[i]-lo)/(hi-lo) * (MAX_PX-MIN_PX));
+    return visualTokenHtml(opt, size);
+  });
+}
 // Looks up a word/short phrase for a learner-facing icon: lowercases,
 // strips a leading "a "/"an "/"the " and trailing punctuation, then
 // tries the whole phrase before falling back to its last word (so "a
@@ -196,7 +239,136 @@ function quantityIconHtml(raw, size){
 // lost - some children will still be sounding out letters even where a
 // picture is the main cue, and it keeps the screen usable for an item a
 // future content update doesn't have an icon for yet.
+// Draws a correct tally-mark group: single strokes for 1-4, and every
+// 5th stroke as a diagonal line struck through the previous 4 ("gate"
+// style), the way tallies are actually taught - never five plain
+// upright strokes. Groups of 5 are laid out side by side with a small
+// gap between groups. Returns {svg, width}.
+function tallyGroupSvg(n, size){
+  size = size || 40;
+  n = Math.max(0, Math.min(60, Math.round(n)));
+  const h = size;
+  const strokeW = Math.max(2, Math.round(size/16));
+  const strokeGap = Math.round(size*0.17);
+  const groupGap = Math.round(size*0.26);
+  let x = strokeW + 2;
+  let inner = "";
+  let remaining = n;
+  while(remaining > 0){
+    const g = Math.min(5, remaining);
+    const startX = x;
+    for(let i=0;i<Math.min(g,4);i++){
+      inner += `<line x1="${x}" y1="2" x2="${x}" y2="${h-2}" stroke="#2F2A22" stroke-width="${strokeW}" stroke-linecap="round"/>`;
+      x += strokeGap;
+    }
+    if(g === 5){
+      const endX = x - strokeGap;
+      inner += `<line x1="${startX-4}" y1="${h-2}" x2="${endX+4}" y2="2" stroke="#B5482F" stroke-width="${strokeW}" stroke-linecap="round"/>`;
+    }
+    x += groupGap;
+    remaining -= 5;
+  }
+  const width = Math.max(x, strokeW+4);
+  return { svg: `<svg width="${width}" height="${h+4}" viewBox="0 0 ${width} ${h+4}" xmlns="http://www.w3.org/2000/svg">${inner}</svg>`, width };
+}
+// A row of a counted icon (e.g. 4 apple emoji) with a label underneath -
+// the shared building block for every Data Handling "stimulus" picture
+// (pictographStimulusHtml, bargraphStimulusHtml) shown ABOVE a question,
+// as opposed to visualTokenHtml which decorates one answer BUTTON.
+function iconGroupHtml(iconKey, count, label, unit, hideCount){
+  unit = unit || 26;
+  const icon = ICON_MAP[iconKey];
+  const isEmoji = icon && !icon.startsWith("<svg");
+  const n = Math.max(0, Math.min(12, Math.round(count)));
+  const dot = icon
+    ? (isEmoji
+        ? `<span class="visual-icon emoji" style="font-size:${unit}px;line-height:1;">${icon}</span>`
+        : `<span class="visual-icon" style="width:${unit}px;height:${unit}px;">${icon}</span>`)
+    : `<span class="visual-icon" style="width:${unit}px;height:${unit}px;border-radius:50%;background:#189E71;display:inline-block;"></span>`;
+  const dots = Array.from({length:n}, () => dot).join("");
+  // hideCount: for a "count the pictures yourself" item (the answer IS
+  // the count), the caption must not also print the number - that would
+  // hand the learner the answer instead of asking them to count. Used
+  // for comparison pictographs ("which fruit do more children like"),
+  // the number is fine to show since counting isn't what's being tested.
+  const countLabel = hideCount ? escapeHtml(label) : `${escapeHtml(label)} (${count})`;
+  return `<div class="col" style="align-items:center;gap:4px;">
+    <div style="display:flex;flex-wrap:wrap;gap:2px;max-width:${unit*6}px;justify-content:center;">${dots}</div>
+    <div class="visual-caption" style="font-weight:600;">${countLabel}</div>
+  </div>`;
+}
+// A Data Handling stimulus picture shown above the question, e.g. 4
+// apple icons next to 2 banana icons, each group labelled and counted -
+// so "which fruit do more children like" is something a child can SEE,
+// not only read as numbers in the prompt. Set v.hideCount true for a
+// "count the pictures" item, so the caption doesn't give the answer away.
+function pictographStimulusHtml(v){
+  const rows = (v.groups||[]).map(g => iconGroupHtml(g.icon, g.count, g.label, 26, v.hideCount)).join("");
+  const keyHtml = v.key ? `<div class="muted" style="font-size:.8rem;text-align:center;margin-top:2px;">${escapeHtml(v.key)}</div>` : "";
+  return `<div class="row" style="gap:22px;justify-content:center;flex-wrap:wrap;margin:6px 0 4px;">${rows}</div>${keyHtml}`;
+}
+// A simple proportional bar graph stimulus (e.g. Monday 5, Tuesday 8,
+// Wednesday 3) so bar-graph items show an actual graph, not just a
+// sentence describing one.
+function bargraphStimulusHtml(v){
+  const bars = v.bars || [];
+  const max = Math.max(1, ...bars.map(b=>Number(b.value)||0));
+  const maxH = 84;
+  const colors = ["#4A7C9E","#E8A33D","#8C6FB0","#189E71","#B5482F","#2E6FBA"];
+  const barsHtml = bars.map((b,i) => {
+    const val = Number(b.value)||0;
+    const h = Math.max(8, Math.round((val/max)*maxH));
+    return `<div class="col" style="align-items:center;gap:4px;justify-content:flex-end;">
+      <div style="font-size:.85rem;font-weight:700;">${escapeHtml(String(val))}</div>
+      <div style="width:32px;height:${h}px;background:${colors[i%colors.length]};border-radius:4px 4px 0 0;"></div>
+      <div class="visual-caption">${escapeHtml(b.label)}</div>
+    </div>`;
+  }).join("");
+  return `<div class="row" style="gap:14px;align-items:flex-end;justify-content:center;margin:6px 0 4px;">${barsHtml}</div>`;
+}
+// A single correctly-grouped tally-mark picture as a stimulus (for
+// "Count the tally marks. How many?" short-answer items at Grade 2-3,
+// where CAPS does use tallies - unlike Grade 1, where we no longer ask
+// tally questions at all, see math_items.js).
+function tallyStimulusHtml(v){
+  const { svg } = tallyGroupSvg(v.count, 42);
+  return `<div style="display:flex;justify-content:center;margin:8px 0 6px;">${svg}</div>`;
+}
+// Two or more correctly-grouped tally pictures side by side with their
+// own labels (e.g. "apples (9)" vs "bananas (6)") - for items that
+// compare two tally counts, rather than just count one.
+function tallyGroupsStimulusHtml(v){
+  const rows = (v.groups||[]).map(g => {
+    const { svg } = tallyGroupSvg(g.count, 36);
+    return `<div class="col" style="align-items:center;gap:4px;">
+      <div>${svg}</div>
+      <div class="visual-caption" style="font-weight:600;">${escapeHtml(g.label)} (${g.count})</div>
+    </div>`;
+  }).join("");
+  return `<div class="row" style="gap:24px;justify-content:center;flex-wrap:wrap;margin:6px 0 4px;">${rows}</div>`;
+}
+// Dispatches on item.visual.type to render the right stimulus picture
+// above a question (choice or short). Returns "" when the item has no
+// visual field, so every other item is completely unaffected.
+function stimulusHtml(item){
+  const v = item && item.visual;
+  if(!v) return "";
+  if(v.type === "pictograph") return pictographStimulusHtml(v);
+  if(v.type === "bargraph") return bargraphStimulusHtml(v);
+  if(v.type === "tally") return tallyStimulusHtml(v);
+  if(v.type === "tallygroups") return tallyGroupsStimulusHtml(v);
+  return "";
+}
 function visualTokenHtml(raw, size){
+  // Special "tally:<n>" option syntax (e.g. for "which tally has more
+  // marks: a tally of 7 or a tally of 9?") - renders a correctly-grouped
+  // tally picture as the answer button instead of a bare number.
+  const tallyMatch = String(raw).match(/^tally:(\d+)$/);
+  if(tallyMatch){
+    const n = parseInt(tallyMatch[1], 10);
+    const { svg } = tallyGroupSvg(n, size || 40);
+    return `<span class="visual-token"><span class="visual-icon" style="display:inline-flex;align-items:center;justify-content:center;">${svg}</span><span class="visual-caption">${n}</span></span>`;
+  }
   const qty = quantityIconHtml(raw, size);
   if(qty) return qty;
   const icon = iconForToken(raw);
@@ -825,17 +997,31 @@ function learnerContentHtml(payload){
       </div>` : "";
     const promptLabel = it.sequence ? "What comes next?" : it.prompt;
     const selectedOi = buffer[idx];
+    // Measurement comparison items ("a rope is longer than a pencil -
+    // which one is shorter?") get their two icons sized to the actual
+    // relative size, so a child can SEE which is bigger/longer/heavier,
+    // not just read the caption - see measurementComparisonHtml. Any
+    // other item with a "visual" field (Data Handling pictographs, bar
+    // graphs, tallies) gets its stimulus picture shown above the
+    // question. Both degrade to the original plain rendering when
+    // neither applies, so nothing else changes.
+    const sizedOptionsHtml = (area === "measurement") ? measurementComparisonHtml(it.options) : null;
+    const optionsHtml = (sizedOptionsHtml || it.options.map(opt => visualTokenHtml(opt, 48)))
+      .map((html,oi) => `<button type="button" class="btn secondary icon-choice-btn${selectedOi===oi?' clay':''}" data-idx="${oi}" onclick="captureChoiceAnswer(${idx},${oi},this); const nb=document.getElementById('learnerNextBtn'); if(nb) nb.disabled=false;">${html}</button>`)
+      .join("");
     questionHtml = `<div class="col" style="gap:10px;width:100%;align-items:center;">
       <label style="font-size:1.3rem;text-align:center;">${escapeHtml(promptLabel)}</label>
       ${sequenceHtml}
+      ${stimulusHtml(it)}
       <div class="row" id="choicerow-${idx}" style="gap:10px;flex-wrap:wrap;justify-content:center;">
-        ${it.options.map((opt,oi) => `<button type="button" class="btn secondary icon-choice-btn${selectedOi===oi?' clay':''}" data-idx="${oi}" onclick="captureChoiceAnswer(${idx},${oi},this); const nb=document.getElementById('learnerNextBtn'); if(nb) nb.disabled=false;">${visualTokenHtml(opt, 48)}</button>`).join("")}
+        ${optionsHtml}
       </div>
     </div>`;
   } else {
     const typed = buffer[idx] != null ? buffer[idx] : "";
     questionHtml = `<div class="col" style="gap:14px;width:100%;align-items:center;">
       <label style="font-size:1.3rem;text-align:center;">${escapeHtml(it.prompt)}</label>
+      ${stimulusHtml(it)}
       <input type="text" autocomplete="off" autocapitalize="off" spellcheck="false" style="width:160px;font-size:1.2rem;text-align:center;" value="${escapeHtml(typed)}" oninput="captureShortAnswer(${idx},this.value); const nb=document.getElementById('learnerNextBtn'); if(nb) nb.disabled=!this.value.trim();" />
     </div>`;
   }
@@ -1643,21 +1829,35 @@ function mathReferenceBookletHtml(){
    phonological awareness and graded word reading sections. Carries no
    answers, so it is safe to hand to a learner or leave on a desk.
    ============================================================ */
-function mathResponseItemHtml(it, idx){
+// Prints the same pictures the digital test shows on the learner's
+// iPad - the same size-scaled Measurement comparisons, the same Data
+// Handling pictographs/bar graphs/tallies, the same picture-per-option -
+// so a learner doing this on paper instead of a device gets an
+// identical, equally visual test, not a plain list of words. A learner
+// circles the box around their chosen picture instead of tapping it.
+function mathResponseItemHtml(it, idx, area){
+  const stim = stimulusHtml(it);
   if(it.type === "choice"){
+    const sizedHtml = (area === "measurement") ? measurementComparisonHtml(it.options) : null;
+    const optionHtmls = sizedHtml || it.options.map(opt => visualTokenHtml(opt, 44));
+    const optionCells = optionHtmls.map(html => `
+      <span style="display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:2px solid #8a8070;border-radius:12px;padding:8px 12px;min-width:56px;min-height:56px;">${html}</span>
+    `).join("");
     return `
-      <div style="margin-bottom:14px;">
+      <div style="margin-bottom:16px;">
         <div style="margin-bottom:6px;">${idx+1}. ${escapeHtml(it.prompt)}</div>
-        <div class="row" style="gap:18px;flex-wrap:wrap;padding-left:22px;">
-          ${it.options.map(opt => `<span style="white-space:nowrap;">&#9711; ${escapeHtml(opt)}</span>`).join("")}
-        </div>
+        ${stim}
+        <div class="row" style="gap:14px;flex-wrap:wrap;padding-left:22px;margin-top:4px;">${optionCells}</div>
       </div>
     `;
   }
   return `
-    <div class="row" style="align-items:baseline;gap:10px;margin-bottom:12px;">
-      <span style="flex:1;">${idx+1}. ${escapeHtml(it.prompt)}</span>
-      <span style="width:120px;border-bottom:1px solid #333;height:26px;"></span>
+    <div style="margin-bottom:14px;">
+      <div style="margin-bottom:4px;">${idx+1}. ${escapeHtml(it.prompt)}</div>
+      ${stim}
+      <div style="padding-left:22px;margin-top:4px;">
+        <span style="display:inline-block;width:120px;border-bottom:1px solid #333;height:26px;"></span>
+      </div>
     </div>
   `;
 }
@@ -1671,8 +1871,8 @@ function mathResponseSheetsHtml(){
         <div class="ref-block ref-break">
           <h3>${escapeHtml(meta.label)}, Grade ${gradeLabel(g)}</h3>
           ${sheetHeaderHtml()}
-          <p class="muted" style="margin-bottom:14px;">Answer each question below. For questions with choices, circle your answer.</p>
-          <div style="max-width:560px;">${items.map((it,i) => mathResponseItemHtml(it,i)).join("")}</div>
+          <p class="muted" style="margin-bottom:14px;">Answer each question below. For questions with choices, circle the picture that is your answer.</p>
+          <div style="max-width:560px;">${items.map((it,i) => mathResponseItemHtml(it,i,area)).join("")}</div>
         </div>
       `;
     }).join("");

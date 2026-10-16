@@ -359,7 +359,7 @@ const MATH_ITEMS = {
           "moon",
           "sun"
         ],
-        "answer": 1
+        "answer": 0
       },
       {
         "type": "choice",
@@ -457,7 +457,7 @@ const MATH_ITEMS = {
           "moon",
           "sun"
         ],
-        "answer": 1
+        "answer": 0
       }
     ],
     "2": [
@@ -1499,7 +1499,11 @@ const MATH_ITEMS = {
           "red",
           "blue"
         ],
-        "answer": 0
+        "answer": 0,
+        "visual": {"type": "pictograph", "groups": [
+          {"icon": "red", "count": 3, "label": "red"},
+          {"icon": "blue", "count": 2, "label": "blue"}
+        ]}
       },
       {
         "type": "choice",
@@ -1528,7 +1532,11 @@ const MATH_ITEMS = {
           "more bananas",
           "the same number"
         ],
-        "answer": 2
+        "answer": 2,
+        "visual": {"type": "pictograph", "groups": [
+          {"icon": "apple", "count": 4, "label": "apples"},
+          {"icon": "banana", "count": 4, "label": "bananas"}
+        ]}
       },
       {
         "type": "choice",
@@ -1549,17 +1557,28 @@ const MATH_ITEMS = {
           "apples",
           "bananas"
         ],
-        "answer": 0
+        "answer": 0,
+        "visual": {"type": "pictograph", "groups": [
+          {"icon": "apple", "count": 4, "label": "apples"},
+          {"icon": "banana", "count": 2, "label": "bananas"}
+        ]}
       },
       {
         "type": "short",
-        "prompt": "Count the tally marks: | | | |. How many?",
-        "answer": "4"
+        "prompt": "Count the apples. How many?",
+        "answer": "4",
+        "visual": {"type": "pictograph", "hideCount": true, "groups": [
+          {"icon": "apple", "count": 4, "label": "apples"}
+        ]}
       },
       {
         "type": "short",
         "prompt": "There are 3 red balls and 5 blue balls. How many balls altogether?",
-        "answer": "8"
+        "answer": "8",
+        "visual": {"type": "pictograph", "groups": [
+          {"icon": "red", "count": 3, "label": "red"},
+          {"icon": "blue", "count": 5, "label": "blue"}
+        ]}
       },
       {
         "type": "choice",
@@ -1572,17 +1591,24 @@ const MATH_ITEMS = {
       },
       {
         "type": "choice",
-        "prompt": "A tally shows: apples 3 marks, pears 2 marks. Which fruit has more tallies?",
+        "prompt": "There are 3 apples and 2 pears. Which fruit has more?",
         "options": [
           "apples",
           "pears"
         ],
-        "answer": 0
+        "answer": 0,
+        "visual": {"type": "pictograph", "groups": [
+          {"icon": "apple", "count": 3, "label": "apples"},
+          {"icon": "pear", "count": 2, "label": "pears"}
+        ]}
       },
       {
         "type": "short",
-        "prompt": "Count the tally marks: | | | | |. How many?",
-        "answer": "5"
+        "prompt": "Count the bananas. How many?",
+        "answer": "5",
+        "visual": {"type": "pictograph", "hideCount": true, "groups": [
+          {"icon": "banana", "count": 5, "label": "bananas"}
+        ]}
       }
     ],
     "2": [
@@ -1593,24 +1619,33 @@ const MATH_ITEMS = {
           "Monday",
           "Tuesday"
         ],
-        "answer": 1
+        "answer": 1,
+        "visual": {"type": "pictograph", "key": "1 picture = 1 learner absent", "groups": [
+          {"icon": "learner", "count": 3, "label": "Monday"},
+          {"icon": "learner", "count": 5, "label": "Tuesday"}
+        ]}
       },
       {
         "type": "short",
-        "prompt": "Count the tally marks: | | | | | | | |. How many?",
-        "answer": "8"
+        "prompt": "Count the tally marks. How many?",
+        "answer": "8",
+        "visual": {"type": "tally", "count": 8}
       },
       {
         "type": "short",
         "prompt": "In a survey, 6 children chose soccer and 4 chose netball. How many children were surveyed in total?",
-        "answer": "10"
+        "answer": "10",
+        "visual": {"type": "pictograph", "groups": [
+          {"icon": "soccer", "count": 6, "label": "soccer"},
+          {"icon": "netball", "count": 4, "label": "netball"}
+        ]}
       },
       {
         "type": "choice",
         "prompt": "Which tally has more marks: a tally of 7 or a tally of 9?",
         "options": [
-          "7",
-          "9"
+          "tally:7",
+          "tally:9"
         ],
         "answer": 1
       },
@@ -1621,12 +1656,17 @@ const MATH_ITEMS = {
           "oranges",
           "apples"
         ],
-        "answer": 0
+        "answer": 0,
+        "visual": {"type": "bargraph", "bars": [
+          {"label": "oranges", "value": 7},
+          {"label": "apples", "value": 4}
+        ]}
       },
       {
         "type": "short",
-        "prompt": "Count the tally marks: | | | | | | |. How many?",
-        "answer": "7"
+        "prompt": "Count the tally marks. How many?",
+        "answer": "7",
+        "visual": {"type": "tally", "count": 7}
       }
     ],
     "3": [
@@ -1638,27 +1678,45 @@ const MATH_ITEMS = {
           "Tuesday",
           "Wednesday"
         ],
-        "answer": 2
+        "answer": 2,
+        "visual": {"type": "bargraph", "bars": [
+          {"label": "Monday", "value": 5},
+          {"label": "Tuesday", "value": 8},
+          {"label": "Wednesday", "value": 3}
+        ]}
       },
       {
         "type": "short",
         "prompt": "In a tally of fruit choices, apples got 9 tallies and bananas got 6. How many more chose apples than bananas?",
-        "answer": "3"
+        "answer": "3",
+        "visual": {"type": "tallygroups", "groups": [
+          {"count": 9, "label": "apples"},
+          {"count": 6, "label": "bananas"}
+        ]}
       },
       {
         "type": "short",
         "prompt": "A class survey found 12 learners have dogs, 7 have cats and 3 have fish (one pet each). How many learners were asked?",
-        "answer": "22"
+        "answer": "22",
+        "visual": {"type": "pictograph", "groups": [
+          {"icon": "dog", "count": 12, "label": "dogs"},
+          {"icon": "cat", "count": 7, "label": "cats"},
+          {"icon": "fish", "count": 3, "label": "fish"}
+        ]}
       },
       {
         "type": "short",
-        "prompt": "Count the tally marks: | | | | | | | |. How many?",
-        "answer": "8"
+        "prompt": "Count the tally marks. How many?",
+        "answer": "8",
+        "visual": {"type": "tally", "count": 8}
       },
       {
         "type": "short",
         "prompt": "A pictograph key shows 1 picture = 2 learners. If there are 3 pictures for Grade 3, how many learners does that represent?",
-        "answer": "6"
+        "answer": "6",
+        "visual": {"type": "pictograph", "key": "1 picture = 2 learners", "groups": [
+          {"icon": "learner", "count": 3, "label": "Grade 3"}
+        ]}
       },
       {
         "type": "choice",
