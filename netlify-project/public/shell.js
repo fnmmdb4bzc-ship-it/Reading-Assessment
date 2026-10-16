@@ -22,6 +22,7 @@ const SHELL_PASSWORD = "LetsTestCircle26";
 const SUBJECTS = [
   { id: "english", label: "English Placement Tool", src: "english/index.html" },
   { id: "afrikaans", label: "Afrikaans Placement Tool", src: "afrikaans/index.html" },
+  { id: "afrikaansfal", label: "Afrikaans FAL Placement Tool", src: "afrikaansfal/index.html" },
   { id: "math", label: "Mathematics Placement Tool", src: "math/index.html" }
 ];
 
