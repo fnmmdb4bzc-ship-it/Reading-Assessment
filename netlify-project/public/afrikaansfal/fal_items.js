@@ -30,11 +30,11 @@
 const FAL_ITEMS = {
   "luisterpraat": {
     "1": [
-      { "type": "choice", "prompt": "Wys vir my: Pa", "options": ["pa", "ma", "ouma", "oupa"], "answer": 0 },
-      { "type": "choice", "prompt": "Wys vir my: Ma", "options": ["ma", "pa", "sussie", "boetie"], "answer": 0 },
+      { "type": "choice", "prompt": "Wys vir my: Pa", "visual": {"type": "img", "src": "family.png", "alt": "'n Gesin - oupa, 'n meisie, 'n dogtertjie, Pa, Ma wat 'n baba vashou, 'n seun, 'n kleinkind en ouma"}, "options": ["pa", "ma", "ouma", "oupa"], "answer": 0 },
+      { "type": "choice", "prompt": "Wys vir my: Ma", "visual": {"type": "img", "src": "family.png", "alt": "'n Gesin - oupa, 'n meisie, 'n dogtertjie, Pa, Ma wat 'n baba vashou, 'n seun, 'n kleinkind en ouma"}, "options": ["ma", "pa", "sussie", "boetie"], "answer": 0 },
       { "type": "choice", "prompt": "Wys vir my jou neus.", "options": ["neus", "oog", "mond", "oor"], "answer": 0 },
       { "type": "choice", "prompt": "Wys vir my: 'n Hond", "options": ["hond", "kat", "vis", "voël"], "answer": 0 },
-      { "type": "choice", "prompt": "Watter een is ROOI?", "options": ["rooi", "blou", "groen", "geel"], "answer": 0 },
+      { "type": "choice", "prompt": "Watter een is rooi?", "options": ["rooi", "blou", "groen", "geel"], "answer": 0 },
       { "type": "choice", "prompt": "Wys vir my: 'n Appel", "options": ["appel", "piesang", "brood", "melk"], "answer": 0 },
       { "type": "choice", "prompt": "Wys vir my: 'n Hemp", "options": ["hemp", "broek", "skoene", "hoed"], "answer": 0 },
       { "type": "choice", "prompt": "Doen wat ek sê: Klap jou hande!", "options": ["klap", "spring", "sit", "staan"], "answer": 0 },
@@ -80,10 +80,11 @@ const FAL_ITEMS = {
   },
   "lees": {
     "1": [
-      { "type": "choice", "prompt": "Wys: KAT", "options": ["kat", "hond", "vis", "bal"], "answer": 0 },
-      { "type": "choice", "prompt": "Wys: SON", "options": ["son", "maan", "wolk", "boom"], "answer": 0 },
-      { "type": "choice", "prompt": "Wys: BOOM", "options": ["boom", "huis", "bal", "hoed"], "answer": 0 },
-      { "type": "choice", "prompt": "Wys: STOP", "options": ["stopteken", "skool", "huis", "bal"], "answer": 0 }
+      { "type": "choice", "prompt": "Wys:", "bigWord": "Kat", "options": ["kat", "hond", "vis", "bal"], "answer": 0 },
+      { "type": "choice", "prompt": "Wys:", "bigWord": "Son", "options": ["son", "maan", "wolk", "boom"], "answer": 0 },
+      { "type": "choice", "prompt": "Wys:", "bigWord": "Boom", "options": ["boom", "huis", "bal", "hoed"], "answer": 0 },
+      { "type": "choice", "prompt": "Wys:", "bigWord": "Stop", "options": ["stopteken", "skool", "huis", "bal"], "answer": 0 },
+      { "type": "choice", "prompt": "Watter een hoort nie by die ander nie?", "options": ["stoel", "appel", "peer", "piesang"], "answer": 0 }
     ],
     "2": [
       { "type": "choice", "prompt": "Die kat sit op die bed. Waar sit die kat?", "options": ["bed", "stoel", "boom", "kar"], "answer": 0 },
@@ -99,13 +100,14 @@ const FAL_ITEMS = {
       { "type": "choice", "prompt": "Dit reën buite. Almal bly binne die huis. Waar bly almal?", "options": ["huis", "skool", "winkel", "tuin"], "answer": 0 },
       { "type": "choice", "prompt": "Die kat klim in die boom. Die hond blaf onder die boom. Waar is die hond?", "options": ["Onder die boom", "In die huis", "Op die bal", "By die kar"], "answer": 0 },
       { "type": "choice", "prompt": "Die juffrou gee 'n boek vir die seun. Wat gee die juffrou?", "options": ["'n Boek", "'n Bal", "'n Hoed", "'n Appel"], "answer": 0 },
-      { "type": "choice", "prompt": "Oupa vang vis in die rivier. Wat vang Oupa?", "options": ["vis", "voël", "hond", "kat"], "answer": 0 }
+      { "type": "choice", "prompt": "Oupa vang vis in die rivier. Wat vang Oupa?", "options": ["vis", "voël", "hond", "kat"], "answer": 0 },
+      { "type": "choice", "prompt": "Watter een hoort nie by die ander nie?", "options": ["vis", "olifant", "tier", "sebra"], "answer": 0 }
     ]
   },
   "skryf": {
     "1": [
-      { "type": "choice", "prompt": "Watter woord pas by die prentjie?", "visual": {"type": "pic", "icon": "hond"}, "options": ["hond", "kat", "vis", "bal"], "answer": 0 },
-      { "type": "choice", "prompt": "Watter woord pas by die prentjie?", "visual": {"type": "pic", "icon": "appel"}, "options": ["appel", "piesang", "brood", "melk"], "answer": 0 }
+      { "type": "choice", "prompt": "Watter prentjie pas by die woord?", "bigWord": "Hond", "hideOptionCaptions": true, "options": ["hond", "kat", "vis", "bal"], "answer": 0 },
+      { "type": "choice", "prompt": "Watter prentjie pas by die woord?", "bigWord": "Appel", "hideOptionCaptions": true, "options": ["appel", "piesang", "brood", "melk"], "answer": 0 }
     ],
     "2": [
       { "type": "choice", "prompt": "Voltooi: Ek sien 'n ___.", "visual": {"type": "pic", "icon": "bal"}, "options": ["bal", "boek", "hoed", "appel"], "answer": 0 },

@@ -69,6 +69,20 @@ const DIGITAL_AREAS = AREA_ORDER.slice(); // every FAL content area is learner-d
 // with no "0" rung and no "R" label, unlike the Mathematics tool.
 const GRADE_RANGE = [1, 2, 3];
 function gradeLabel(g){ return g == null ? "" : String(g); }
+// Which grades actually have items for an area - Fonetiese Klanke has
+// none at Grade 1 by design (real phonics instruction only starts at
+// Grade 2 under CAPS). Used so the examiner can never land on, or
+// manually pick, a grade that sends the learner nothing - that used to
+// show the learner a dead-end "ask your examiner for a different code"
+// screen whenever a Grade 1 session landed on Fonetiese Klanke.
+function gradesWithItems(area){
+  return GRADE_RANGE.filter(g => FAL_ITEMS[area] && FAL_ITEMS[area][g]);
+}
+function firstAvailableGrade(area, preferredGrade){
+  if(FAL_ITEMS[area] && FAL_ITEMS[area][preferredGrade]) return preferredGrade;
+  const list = gradesWithItems(area);
+  return list.length ? list[0] : preferredGrade;
+}
 
 /* ============================================================
    Helpers (identical in spirit to the other subjects')
@@ -111,13 +125,15 @@ const ICON_MAP = {
   // Body parts (Grade 1: "My Body")
   "neus": "👃", "oog": "👁️", "mond": "👄", "oor": "👂",
   // Animals - domestic (Grade 1 "Domestic Animals") and wild (Grade 3 "Wild Animals")
-  "hond": "🐶", "kat": "🐱", "vis": "🐟", "voël": "🐦",
+  "hond": _imgIcon("hond.png"), "kat": _imgIcon("kat.png"), "vis": _imgIcon("vis.png"), "voël": "🐦",
   "koei": "🐮", "skaap": "🐑", "perd": "🐴",
-  "sebra": "🦓", "leeu": "🦁", "olifant": "🐘", "aap": "🐒",
+  "sebra": _imgIcon("sebra.png"), "leeu": "🦁", "olifant": _imgIcon("olifant.png"), "aap": "🐒",
+  "tier": _imgIcon("tier.png"), // new word, used by the wild-animal "doesn't fit" item below
   // Food (Grade 1 "Food")
-  "appel": "🍎", "piesang": "🍌", "brood": "🍞", "melk": "🥛", "vleis": "🍖",
+  "appel": _imgIcon("appel.png"), "piesang": _imgIcon("piesang.png"), "brood": "🍞", "melk": "🥛", "vleis": "🍖",
+  "peer": _imgIcon("peer.png"), // new word, used by the fruit "doesn't fit" item below
   // Clothes (Grade 1 "Clothes")
-  "hemp": "👕", "broek": "👖", "skoene": "👟", "hoed": "🎩",
+  "hemp": "👕", "broek": "👖", "skoene": "👟", "hoed": _imgIcon("hoed.png"),
   // Actions - "responding physically to simple instructions" (Grade 1-2).
   // Real pictures of a child doing each action, not emoji - "sit" in
   // particular used to be a chair emoji (furniture, not the action of
@@ -127,9 +143,9 @@ const ICON_MAP = {
   "sit": _imgIcon("action-sit.png"), "staan": _imgIcon("action-staan.png"),
   "loop": _imgIcon("action-loop.png"),
   // Weather and sky (Grade 1 shapes/colours groundwork, general vocabulary)
-  "wolk": "☁️", "reën": "🌧️",
-  "son": _svgIcon(`<g fill="#E8A33D"><circle cx="24" cy="24" r="11"/><g stroke="#E8A33D" stroke-width="3" stroke-linecap="round"><line x1="24" y1="2" x2="24" y2="9"/><line x1="24" y1="39" x2="24" y2="46"/><line x1="2" y1="24" x2="9" y2="24"/><line x1="39" y1="24" x2="46" y2="24"/><line x1="8" y1="8" x2="13" y2="13"/><line x1="35" y1="35" x2="40" y2="40"/><line x1="40" y1="8" x2="35" y2="13"/><line x1="13" y1="35" x2="8" y2="40"/></g></g>`),
-  "maan": _svgIcon(`<path d="M30,4 A20,20 0 1 0 30,44 A15,20 0 0 1 30,4 Z" fill="#5B6B8C"/>`),
+  "wolk": _imgIcon("wolk.png"), "reën": "🌧️",
+  "son": _imgIcon("son.png"),
+  "maan": _imgIcon("maan.png"),
   // Numbers 1-6 (Grade 1-3 "number/age/size") - Unicode die-face glyphs, a
   // real, instantly-recognisable picture of the quantity rather than a
   // bare numeral.
@@ -151,15 +167,15 @@ const ICON_MAP = {
   "groot": _svgIcon(`<circle cx="24" cy="24" r="22" fill="#189E71"/>`),
   "klein": _svgIcon(`<circle cx="24" cy="24" r="10" fill="#189E71"/>`),
   // Play/Sport, Journeys, Supermarket, Farming (Grade 2 topics)
-  "bal": "⚽", "fiets": "🚲", "boek": "📖", "sak": "🎒", "geld": "💰",
-  "kar": "🚗", "bus": "🚌", "trein": "🚂", "huis": "🏠", "boom": "🌳", "bed": "🛏️",
+  "bal": _imgIcon("bal.png"), "fiets": "🚲", "boek": "📖", "sak": "🎒", "geld": "💰",
+  "kar": "🚗", "bus": "🚌", "trein": "🚂", "huis": _imgIcon("huis.png"), "boom": _imgIcon("boom.png"), "bed": "🛏️",
   // People who help (Grade 1-2 "People who help me")
   "dokter": "🧑‍⚕️", "onderwyser": "👨‍🏫", "juffrou": "👩‍🏫",
   "polisieman": "👮", "brandweerman": "🧑‍🚒", "boer": "🧑‍🌾",
   // The Sea, community places (Grade 2-3)
-  "see": "🌊", "winkel": "🏪", "kerk": "⛪", "skool": "🏫", "tuin": "🌻",
+  "see": "🌊", "winkel": "🏪", "kerk": "⛪", "skool": _imgIcon("skool.png"), "tuin": "🌻",
   // Lees (Reading): environmental print / signs
-  "stopteken": "🛑", "stoel": "🪑"
+  "stopteken": _imgIcon("stopteken.png"), "stoel": _imgIcon("stoel.png")
 };
 // Looks up a word/short phrase for a learner-facing icon: lowercases,
 // strips a leading "'n"/"die"/"a"/"the" and trailing punctuation, then
@@ -179,12 +195,12 @@ function iconForToken(raw){
 // escaped text) plus a small caption underneath so the word is never
 // lost - some learners will still be sounding out letters even where a
 // picture is the main cue.
-function visualTokenHtml(raw, size){
+function visualTokenHtml(raw, size, hideCaption){
   const icon = iconForToken(raw);
-  const label = `<span class="visual-caption">${escapeHtml(raw)}</span>`;
+  const label = hideCaption ? "" : `<span class="visual-caption">${escapeHtml(raw)}</span>`;
   if(!icon) return `<span class="visual-token text-only">${escapeHtml(raw)}</span>`;
   if(icon.startsWith("IMG:")){
-    const box = `<span class="visual-icon" style="width:${size||40}px;height:${size||40}px;display:inline-flex;align-items:center;justify-content:center;"><img src="${escapeHtml(icon.slice(4))}" alt="" style="max-width:100%;max-height:100%;object-fit:contain;" /></span>`;
+    const box = `<span class="visual-icon" style="width:${size||40}px;height:${size||40}px;display:inline-flex;align-items:center;justify-content:center;"><img src="${escapeHtml(icon.slice(4))}" alt="${hideCaption ? '' : escapeHtml(raw)}" style="max-width:100%;max-height:100%;object-fit:contain;" /></span>`;
     return `<span class="visual-token">${box}${label}</span>`;
   }
   const isEmoji = !icon.startsWith("<svg");
@@ -192,6 +208,17 @@ function visualTokenHtml(raw, size){
     ? `<span class="visual-icon emoji" style="font-size:${size||40}px;line-height:1;">${icon}</span>`
     : `<span class="visual-icon" style="width:${size||40}px;height:${size||40}px;">${icon}</span>`;
   return `<span class="visual-token">${box}${label}</span>`;
+}
+// The actual word a Lees/Skryf item is testing, shown MUCH bigger than
+// the small instruction text around it (e.g. "Wys:" or the writing
+// task's own short instruction) - this is the thing the child is
+// actually meant to read, so it needs to dominate the screen, not sit at
+// the same size as everything else. Returns "" when the item has no
+// bigWord, so every other item (Luister en Praat's oral items, for
+// instance, which have nothing for the child to read) is unaffected.
+function bigWordHtml(it){
+  if(!it || !it.bigWord) return "";
+  return `<div style="font-size:3.4rem;font-weight:700;line-height:1.1;text-align:center;margin:2px 0 4px;">${escapeHtml(it.bigWord)}</div>`;
 }
 // A single stimulus picture shown ABOVE a question (as opposed to
 // visualTokenHtml, which decorates one answer BUTTON) - used by Skryf's
@@ -795,11 +822,12 @@ function learnerContentHtml(payload){
   let questionHtml;
   if(it.type === "choice"){
     const selectedOi = buffer[idx];
-    const optionsHtml = it.options.map(opt => visualTokenHtml(opt, 48))
+    const optionsHtml = it.options.map(opt => visualTokenHtml(opt, 48, !!it.hideOptionCaptions))
       .map((html,oi) => `<button type="button" class="btn secondary icon-choice-btn${selectedOi===oi?' clay':''}" data-idx="${oi}" onclick="captureChoiceAnswer(${idx},${oi},this); const nb=document.getElementById('learnerNextBtn'); if(nb) nb.disabled=false;">${html}</button>`)
       .join("");
     questionHtml = `<div class="col" style="gap:10px;width:100%;align-items:center;">
-      <label style="font-size:1.3rem;text-align:center;">${escapeHtml(it.prompt)}</label>
+      ${it.prompt ? `<label style="font-size:1.3rem;text-align:center;">${escapeHtml(it.prompt)}</label>` : ""}
+      ${bigWordHtml(it)}
       ${stimulusHtml(it)}
       <div class="row" id="choicerow-${idx}" style="gap:10px;flex-wrap:wrap;justify-content:center;">
         ${optionsHtml}
@@ -808,7 +836,8 @@ function learnerContentHtml(payload){
   } else {
     const typed = buffer[idx] != null ? buffer[idx] : "";
     questionHtml = `<div class="col" style="gap:14px;width:100%;align-items:center;">
-      <label style="font-size:1.3rem;text-align:center;">${escapeHtml(it.prompt)}</label>
+      ${it.prompt ? `<label style="font-size:1.3rem;text-align:center;">${escapeHtml(it.prompt)}</label>` : ""}
+      ${bigWordHtml(it)}
       ${stimulusHtml(it)}
       <input type="text" autocomplete="off" autocapitalize="off" spellcheck="false" style="width:160px;font-size:1.2rem;text-align:center;" value="${escapeHtml(typed)}" oninput="captureShortAnswer(${idx},this.value); const nb=document.getElementById('learnerNextBtn'); if(nb) nb.disabled=!this.value.trim();" />
     </div>`;
@@ -1193,7 +1222,11 @@ async function renderConsole(app){
 function setNav(key){
   STATE.navSection = key;
   if(AREA_META[key]){
-    const grade = STATE.areaGrade[key] || STATE.session.gradeStart;
+    // firstAvailableGrade steers around grades this area has no items for
+    // (Fonetiese Klanke at Grade 1) instead of pushing a dead end to the
+    // learner's screen.
+    const grade = firstAvailableGrade(key, STATE.areaGrade[key] || STATE.session.gradeStart);
+    STATE.areaGrade[key] = grade;
     startCapturePolling(key, grade);
     pushLiveItem(key, grade);
   } else {
@@ -1358,7 +1391,7 @@ function digitalAreaHtml(area){
       <div class="card">
         <label>Grade-level item set</label>
         <select onchange="changeAreaGrade('${area}',this.value)">
-          ${GRADE_RANGE.map(g=>`<option value="${g}" ${String(g)===String(grade)?'selected':''}>Grade ${gradeLabel(g)}</option>`).join("")}
+          ${gradesWithItems(area).map(g=>`<option value="${g}" ${String(g)===String(grade)?'selected':''}>Grade ${gradeLabel(g)}</option>`).join("")}
         </select>
         <div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap;align-items:center;">
           ${isLiveHere
@@ -1555,13 +1588,15 @@ function falReferenceBookletHtml(){
    ============================================================ */
 function falResponseItemHtml(it, idx){
   const stim = stimulusHtml(it);
+  const bigWord = bigWordHtml(it);
   if(it.type === "choice"){
     const optionCells = it.options.map(opt => `
-      <span style="display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:2px solid #8a8070;border-radius:12px;padding:8px 12px;min-width:56px;min-height:56px;">${visualTokenHtml(opt, 44)}</span>
+      <span style="display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:2px solid #8a8070;border-radius:12px;padding:8px 12px;min-width:56px;min-height:56px;">${visualTokenHtml(opt, 44, !!it.hideOptionCaptions)}</span>
     `).join("");
     return `
       <div style="margin-bottom:16px;">
-        <div style="margin-bottom:6px;">${idx+1}. ${escapeHtml(it.prompt)}</div>
+        ${it.prompt ? `<div style="margin-bottom:6px;">${idx+1}. ${escapeHtml(it.prompt)}</div>` : `<div style="margin-bottom:6px;">${idx+1}.</div>`}
+        ${bigWord}
         ${stim}
         <div class="row" style="gap:14px;flex-wrap:wrap;padding-left:22px;margin-top:4px;">${optionCells}</div>
       </div>
@@ -1569,7 +1604,8 @@ function falResponseItemHtml(it, idx){
   }
   return `
     <div style="margin-bottom:14px;">
-      <div style="margin-bottom:4px;">${idx+1}. ${escapeHtml(it.prompt)}</div>
+      ${it.prompt ? `<div style="margin-bottom:4px;">${idx+1}. ${escapeHtml(it.prompt)}</div>` : `<div style="margin-bottom:4px;">${idx+1}.</div>`}
+      ${bigWord}
       ${stim}
       <div style="padding-left:22px;margin-top:4px;">
         <span style="display:inline-block;width:120px;border-bottom:1px solid #333;height:26px;"></span>
