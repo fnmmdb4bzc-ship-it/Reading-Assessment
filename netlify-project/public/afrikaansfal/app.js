@@ -120,8 +120,11 @@ function _svgIcon(inner, vb){
 // prefix; the real work is just remembering the filename.
 function _imgIcon(filename){ return "IMG:" + filename; }
 const ICON_MAP = {
-  // Family (Luister en Praat, Grade 1: "Myself and My Family")
-  "pa": "👨", "ma": "👩", "ouma": "👵", "oupa": "👴", "sussie": "👧", "boetie": "👦",
+  // Family (Luister en Praat, Grade 1: "Myself and My Family") - no
+  // icon on purpose: the emoji faces all looked too similar for a young
+  // learner to tell apart, so these fall back to plain text (handled by
+  // visualTokenHtml's text-only branch below) rather than a wrong/confusing
+  // picture.
   // Body parts (Grade 1: "My Body")
   "neus": "👃", "oog": "👁️", "mond": "👄", "oor": "👂",
   // Animals - domestic (Grade 1 "Domestic Animals") and wild (Grade 3 "Wild Animals")
